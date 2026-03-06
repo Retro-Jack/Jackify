@@ -23,9 +23,9 @@ set -uo pipefail
 
 # ----- Configuration ---------------------------------------------------------
 
-DOWNLOADS_DIR="/mnt/misc/Downloads/_Torrents/Finished/Files/_jackify_test"
-STAGING_DIR="/mnt/multimedia/Conversion/Handbrake/Input"
-OUTPUT_DIR="/mnt/multimedia/Conversion/Handbrake/Output"
+DOWNLOADS_DIR="/mnt/misc/Downloads/_Torrents/Finished/Files"
+STAGING_DIR="/mnt/multimedia/Conversion/Handbrake/1) Staging"
+OUTPUT_DIR="/mnt/multimedia/Conversion/Handbrake/2) Done"
 HANDBRAKE_CLI="/usr/bin/HandBrakeCLI"
 PRESET_DIR="/mnt/applications/Linux Applications/_Handy Scripts/Jackify/Handbrake Presets"
 PRESET_FILE=""
@@ -36,12 +36,11 @@ PROCESS_DELAY=2
 
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
 
-LOG_FILE="$(dirname "$(realpath "$0")")/jackify_log.txt"
+LOG_FILE="$OUTPUT_DIR/jackify_log.txt"
 LOG_ENABLED=false
 
 # ----- Counters --------------------------------------------------------------
 
-files_copied=0
 files_failed=0
 videos_converted=0
 videos_skipped=0
@@ -61,8 +60,13 @@ print_header() {
 }
 
 pause_and_clear() {
+    # Counts down from 10, then clears. Press any key to skip the wait.
+    local i
     echo
-    read -r -p "Press any key to continue..." -n1
+    for i in 10 9 8 7 6 5 4 3 2 1; do
+        printf '\rContinuing in %d... (press any key to skip)  ' "$i"
+        read -r -t 1 -n1 && break
+    done
     clear
 }
 
@@ -128,9 +132,7 @@ copy_file_to_input() {
 
     if [[ ! -f "$target_file" ]]; then
         echo "  Copying: $(basename "$source_file") -> $(basename "$target_file")"
-        if cp "$source_file" "$target_file"; then
-            files_copied=$((files_copied + 1))
-        else
+        if ! cp "$source_file" "$target_file"; then
             warn "Copy failed: $source_file"
             files_failed=$((files_failed + 1))
         fi
@@ -494,9 +496,6 @@ if [[ ${#downloads_list[@]} -gt 0 ]]; then
         copy_file_to_input "$file"
     done
 
-    echo
-    echo "Total files copied: $files_copied"
-
     pause_and_clear
 else
     echo "Downloads folder is empty — skipping copy, using staging folder."
@@ -557,12 +556,19 @@ echo
 printf 'Videos found:     %d\n' "$total_videos"
 printf 'Videos converted: %d\n' "$videos_converted"
 printf 'Videos skipped:   %d\n' "$videos_skipped"
-printf 'Files copied:     %d\n' "$files_copied"
 [[ $videos_failed  -gt 0 ]] && printf 'Videos failed:    %d\n' "$videos_failed"
 [[ $files_failed   -gt 0 ]] && printf 'Copy failures:    %d\n' "$files_failed"
 [[ $rename_errors  -gt 0 ]] && printf 'Rename errors:    %d\n' "$rename_errors"
 echo "Name cleanup:     Completed"
 echo
 $LOG_ENABLED && echo "Full details available in: $LOG_FILE"
+echo
+
+read -r -p "Clean staging folder? [y/N] " answer
+if [[ "${answer,,}" == "y" ]]; then
+    echo "Cleaning staging folder..."
+    find "$STAGING_DIR" -mindepth 1 -delete
+    echo "Done."
+fi
 echo
 print_header "Done"
