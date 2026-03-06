@@ -1,6 +1,6 @@
 # Jackify
 
-A bash script that automates video conversion using HandBrakeCLI. It copies videos from a source folder to an input folder (preserving directory structure), converts them using a named HandBrake preset, then cleans up file and folder names.
+A bash script that automates video conversion using HandBrakeCLI. It copies videos from a downloads folder to an input folder (preserving directory structure), converts them using a named HandBrake preset, then cleans up file and folder names.
 
 ## Requirements
 
@@ -12,8 +12,8 @@ Edit the variables at the top of `jackify.sh` to match your environment:
 
 | Variable | Description |
 |---|---|
-| `SOURCE_DIR` | Where your source videos live |
-| `INPUT_DIR` | Staging folder for videos to be converted |
+| `DOWNLOADS_DIR` | Your downloads folder |
+| `STAGING_DIR` | Staging folder for videos to be converted |
 | `OUTPUT_DIR` | Where converted videos are written |
 | `HANDBRAKE_CLI` | Path to HandBrakeCLI binary |
 | `PRESET_DIR` | Folder containing HandBrake preset JSON files |
@@ -34,7 +34,6 @@ A preset **must** be specified on every run to prevent mistakes.
 |---|---|
 | `-jack` | Use the Jack 1080 preset |
 | `-loren` | Use the Loren 720 preset |
-| `-d, --dvd` | DVD mode: rename HandBrake title numbers on copy (`## - name.ext` → `DVD Title ##.ext`) |
 | `-l, --log` | Enable logging to `jackify_log.txt` |
 | `-h, --help` | Show help message |
 
@@ -44,15 +43,15 @@ A preset **must** be specified on every run to prevent mistakes.
 # Convert using the Jack 1080 preset
 jackify.sh -jack
 
-# Convert DVD rips using the Loren 720 preset, with logging
-jackify.sh -loren --dvd --log
+# Convert using the Loren 720 preset, with logging
+jackify.sh -loren --log
 ```
 
 ## How It Works
 
-1. **Copy** — Videos are copied from `SOURCE_DIR` to `INPUT_DIR`, preserving folder structure. Already-copied files are skipped. In DVD mode, files prefixed with HandBrake title numbers (`01 - name.ext`) are renamed to `DVD Title 01.ext` during the copy.
-2. **Convert** — All videos in `INPUT_DIR` are converted using HandBrakeCLI with the selected preset. Already-converted files are skipped.
-3. **Cleanup** — File and folder names in `OUTPUT_DIR` are cleaned: dots, underscores, and hyphens used as word separators are replaced with spaces, and multiple spaces are collapsed.
+1. **Copy** — Videos are copied from your downloads folder (`DOWNLOADS_DIR`) to `STAGING_DIR`, preserving folder structure. Already-copied files are skipped. If `DOWNLOADS_DIR` is empty, this step is skipped and existing files in `STAGING_DIR` are used instead.
+2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. Already-converted files are skipped.
+3. **Cleanup** — Output filenames and folder names are cleaned: DVD title number prefixes (`## - name`) are stripped, known source/release tags are removed, dots/underscores/hyphens used as word separators are replaced with spaces, and title case is applied.
 
 ## Presets
 
