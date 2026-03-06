@@ -52,6 +52,7 @@ jackify.sh -loren --log
 1. **Copy** — Videos are copied from your downloads folder (`DOWNLOADS_DIR`) to `STAGING_DIR`, preserving folder structure. Already-copied files are skipped. If `DOWNLOADS_DIR` is empty, this step is skipped and existing files in `STAGING_DIR` are used instead.
 2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. Already-converted files are skipped.
 3. **Cleanup** — Output filenames and folder names are cleaned: DVD title number prefixes (`## - name`) are stripped, known source/release tags are removed, dots/underscores/hyphens used as word separators are replaced with spaces, and title case is applied.
+4. **Staging cleanup** — After the final report, you are prompted whether to delete the contents of `STAGING_DIR`.
 
 ## Presets
 
