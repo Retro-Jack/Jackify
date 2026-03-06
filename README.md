@@ -1,6 +1,6 @@
 # Jackify
 
-A bash script that automates video conversion using HandBrakeCLI. It copies videos from a downloads folder to an input folder (preserving directory structure), converts them using a named HandBrake preset, then cleans up file and folder names.
+A bash script that automates video conversion using HandBrakeCLI. It copies videos from a downloads folder to a staging folder (preserving directory structure), converts them using a named HandBrake preset, outputs them, then cleans up file and folder names.
 
 ## Requirements
 
