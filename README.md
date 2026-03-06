@@ -4,10 +4,7 @@ A bash script that automates video conversion using HandBrakeCLI. It copies vide
 
 ## Requirements
 
-- bash >= 4.4
-- perl
-- GNU find
-- [HandBrakeCLI](https://handbrake.fr/downloads2.php)
+- [HandBrakeCLI](https://handbrake.fr/downloads2.php) — note this is a separate package from the HandBrake GUI and must be installed independently
 
 ## Configuration
 
