@@ -1,27 +1,30 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VIDEO CONVERSION AND RENAMING AUTOMATION SCRIPT
+# Jackify — Automated video conversion and renaming
 # =============================================================================
-# 1. Copies videos from source folder to input folder (preserving structure),
-#    renaming HandBrake DVD title numbers ("## - name.ext" -> "DVD Title ##.ext")
-# 2. Converts videos using HandBrakeCLI with a custom preset
-# 3. Cleans up file and folder names (optional)
+# Copies videos from a downloads folder to a staging folder, converts them
+# with HandBrakeCLI, then cleans up output filenames and folder names.
 #
-# Requires: bash >= 4.4, perl, GNU find, HandBrakeCLI
+# Steps:
+#   1. Copy from DOWNLOADS_DIR to STAGING_DIR (skipped if downloads is empty)
+#   2. Convert all videos in STAGING_DIR using the selected HandBrake preset
+#   3. Strip source tags, clean separators, and apply title case to OUTPUT_DIR
+#
+# Requires: HandBrakeCLI  (other dependencies are standard on any Linux system)
 #
 # Options:
-#   -l, --log   Enable logging to jackify_log.txt
-#   -d, --dvd   Rename HandBrake title numbers on copy ("## - name" -> "DVD Title ##")
-#   -loren      Use Loren 720 preset
-#   -jack       Use Jack 1080 preset
+#   -jack       Use Jack 1080 preset (required — no default)
+#   -loren      Use Loren 720 preset (required — no default)
+#   -l, --log   Log output to jackify_log.txt
+#   -h, --help  Show this help message
 # =============================================================================
 
 set -uo pipefail
 
-# ----------------------------- CONFIGURATION ---------------------------------
+# ----- Configuration ---------------------------------------------------------
 
-SOURCE_DIR="/mnt/misc/Downloads/_Torrents/Finished/Files"
-INPUT_DIR="/mnt/multimedia/Conversion/Handbrake/Input"
+DOWNLOADS_DIR="/mnt/misc/Downloads/_Torrents/Finished/Files/_jackify_test"
+STAGING_DIR="/mnt/multimedia/Conversion/Handbrake/Input"
 OUTPUT_DIR="/mnt/multimedia/Conversion/Handbrake/Output"
 HANDBRAKE_CLI="/usr/bin/HandBrakeCLI"
 PRESET_DIR="/mnt/applications/Linux Applications/_Handy Scripts/Jackify/Handbrake Presets"
@@ -29,16 +32,14 @@ PRESET_FILE=""
 PRESET_NAME=""
 
 OUTPUT_FORMAT="mp4"
-ENABLE_CLEANUP="true"
 PROCESS_DELAY=2
-DVD_MODE=false
 
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
 
 LOG_FILE="$(dirname "$(realpath "$0")")/jackify_log.txt"
 LOG_ENABLED=false
 
-# ----------------------------- COUNTERS --------------------------------------
+# ----- Counters --------------------------------------------------------------
 
 files_copied=0
 files_failed=0
@@ -47,15 +48,22 @@ videos_skipped=0
 videos_failed=0
 rename_errors=0
 
-# Tracks the output file currently being written; cleared by the EXIT trap.
+# Set by process_video while HandBrake is running; the EXIT trap removes the
+# partial output file if the script is interrupted mid-conversion.
 _current_output=""
 
-# ----------------------------- FUNCTIONS -------------------------------------
+# ----- Functions -------------------------------------------------------------
 
 print_header() {
     printf '\n==================================================\n'
     printf '      %s\n' "$1"
     printf '==================================================\n'
+}
+
+pause_and_clear() {
+    echo
+    read -r -p "Press any key to continue..." -n1
+    clear
 }
 
 log_message() {
@@ -69,16 +77,16 @@ die() {
     exit 1
 }
 
+warn() {
+    printf '[WARN]  %s\n' "$1" >&2
+    log_message "WARN: $1"
+}
+
 _on_exit() {
     [[ -n "$_current_output" && -f "$_current_output" ]] && rm -f "$_current_output"
     log_message "Session ended"
 }
 trap '_on_exit' EXIT
-
-warn() {
-    printf '[WARN]  %s\n' "$1" >&2
-    log_message "WARN: $1"
-}
 
 check_path() {
     [[ -d "$1" ]] || die "Cannot find directory: $1 ($2)"
@@ -88,9 +96,9 @@ check_file() {
     [[ -f "$1" ]] || die "Cannot find file: $1 ($2)"
 }
 
-# Build a find expression for all VIDEO_EXTENSIONS.
-# Populates the named array variable with (-name "*.ext" -o ...) args.
 build_ext_args() {
+    # Builds a find -name expression matching all VIDEO_EXTENSIONS.
+    # Populates the named array variable passed as $1 with the resulting args.
     local -n _out=$1
     local first=true
     for ext in "${VIDEO_EXTENSIONS[@]}"; do
@@ -104,20 +112,13 @@ build_ext_args() {
 }
 
 copy_file_to_input() {
+    # Copies a single file from DOWNLOADS_DIR to STAGING_DIR, preserving its
+    # relative path.
     local source_file="$1"
-    local relative_path="${source_file#"$SOURCE_DIR"/}"
-    local target_file="$INPUT_DIR/$relative_path"
+    local relative_path="${source_file#"$DOWNLOADS_DIR"/}"
+    local target_file="$STAGING_DIR/$relative_path"
     local target_dir
     target_dir="$(dirname "$target_file")"
-
-    # Rename HandBrake DVD title numbers on the way in: "## - name.ext" -> "DVD Title ##.ext"
-    local filename stem ext
-    filename="$(basename "$target_file")"
-    stem="${filename%.*}"
-    ext="${filename##*.}"
-    if $DVD_MODE && [[ "$stem" =~ ^([0-9]+)[[:space:]]+-[[:space:]]+ ]]; then
-        target_file="$target_dir/DVD Title ${BASH_REMATCH[1]}.${ext}"
-    fi
 
     if ! mkdir -p "$target_dir"; then
         warn "Could not create directory: $target_dir — skipping $(basename "$source_file")"
@@ -137,11 +138,14 @@ copy_file_to_input() {
 }
 
 process_video() {
+    # Converts a single video file using HandBrakeCLI. Skips files that have
+    # already been converted. Output streams live to the terminal; --log
+    # additionally tees it to the log file.
     local input_file="$1"
     local current_num="$2"
     local total_num="$3"
 
-    local relative_path="${input_file#"$INPUT_DIR"/}"
+    local relative_path="${input_file#"$STAGING_DIR"/}"
     local relative_noext="${relative_path%.*}"
     local output_file="$OUTPUT_DIR/${relative_noext}.${OUTPUT_FORMAT}"
     local output_dir
@@ -171,36 +175,47 @@ process_video() {
 
     log_message "Converting: $(basename "$input_file")"
 
-    # --preset-import-file loads the JSON; --preset selects by name within it.
-    # _current_output lets the EXIT trap remove a partial file on SIGINT/SIGTERM.
-    local hb_out
-    $LOG_ENABLED && hb_out="$LOG_FILE" || hb_out="/dev/null"
+    # _current_output is cleared by the EXIT trap on interruption, which
+    # removes the partial file. --preset-import-file + --preset are both
+    # required to select a named preset from a JSON file.
+    local hb_ok
     _current_output="$output_file"
-    if "$HANDBRAKE_CLI" \
-        -i "$input_file" \
-        -o "$output_file" \
-        --preset-import-file "$PRESET_FILE" \
-        --preset "$PRESET_NAME" >> "$hb_out" 2>&1; then
+    if $LOG_ENABLED; then
+        "$HANDBRAKE_CLI" \
+            -i "$input_file" \
+            -o "$output_file" \
+            --preset-import-file "$PRESET_FILE" \
+            --preset "$PRESET_NAME" 2>&1 | tee -a "$LOG_FILE"
+        hb_ok=${PIPESTATUS[0]}
+    else
+        "$HANDBRAKE_CLI" \
+            -i "$input_file" \
+            -o "$output_file" \
+            --preset-import-file "$PRESET_FILE" \
+            --preset "$PRESET_NAME" 2>&1
+        hb_ok=$?
+    fi
+
+    if [[ $hb_ok -eq 0 ]]; then
         _current_output=""
         echo "[SUCCESS] Conversion complete"
         videos_converted=$((videos_converted + 1))
     else
         _current_output=""
         rm -f "$output_file"
-        warn "HandBrake failed on: $(basename "$input_file") (see log for details)"
+        warn "HandBrake failed on: $(basename "$input_file")${LOG_ENABLED:+ (see log for details)}"
         videos_failed=$((videos_failed + 1))
     fi
 
     sleep "$PROCESS_DELAY"
 }
 
-# Rename files or directories using a Perl regex.
-# Usage: rename_in_path <pattern> <replacement> <directory> [--recursive] [--dirs]
-#
-# --dirs always recurses fully and uses -depth so children are renamed before
-# parents, preventing path invalidation when a parent dir is renamed mid-traversal.
-# --recursive only applies to file mode (without --dirs).
 rename_in_path() {
+    # Renames files or directories in a path using a Perl regex substitution.
+    # Usage: rename_in_path <pattern> <replacement> <directory> [--recursive] [--dirs]
+    #
+    # --dirs recurses with -depth so children are renamed before parents, preventing
+    # path invalidation when a parent directory is renamed mid-traversal.
     local pattern="$1"
     local replacement="$2"
     local directory="$3"
@@ -218,11 +233,8 @@ rename_in_path() {
     local -a find_args=("$directory")
 
     if $dirs_only; then
-        # -depth ensures bottom-up order: rename children before parents.
-        # Global options (-depth, -mindepth) must precede test predicates (-type).
         find_args+=("-depth" "-mindepth" "1" "-type" "d")
     else
-        # Global options first, then test predicates.
         find_args+=("-mindepth" "1")
         $recursive || find_args+=("-maxdepth" "1")
         find_args+=("-type" "f")
@@ -232,7 +244,6 @@ rename_in_path() {
         local parent name new_name
         parent="$(dirname "$item")"
         name="$(basename "$item")"
-        # perl handles full regex (lookaheads, \s, etc.); strip trailing spaces/dots
         if ! new_name="$(printf '%s' "$name" | perl -pe "s/$pattern/$replacement/gi; s/[. ]+\$//" 2>/dev/null)"; then
             warn "Perl regex failed on: $name (pattern: $pattern)"
             rename_errors=$((rename_errors + 1))
@@ -254,21 +265,191 @@ rename_in_path() {
     done < <(find "${find_args[@]}" -print0 2>/dev/null)
 }
 
-# ----------------------------- ARGUMENT PARSING ------------------------------
+strip_source_tags() {
+    # Strips common source release tags from filenames and directory names.
+    # All square-bracketed content is removed unconditionally. Known technical
+    # tags in parentheses are removed; years e.g. "(2007)" are preserved.
+    # Orphaned separators left behind are cleaned up afterwards.
+    # Usage: strip_source_tags <directory> [--recursive] [--dirs]
+    local directory="$1"
+    local recursive=false
+    local dirs_only=false
+    shift 1
+
+    for arg in "$@"; do
+        case "$arg" in
+            --recursive) recursive=true ;;
+            --dirs)      dirs_only=true ;;
+        esac
+    done
+
+    local -a find_args=("$directory")
+    if $dirs_only; then
+        find_args+=("-depth" "-mindepth" "1" "-type" "d")
+    else
+        find_args+=("-mindepth" "1")
+        $recursive || find_args+=("-maxdepth" "1")
+        find_args+=("-type" "f")
+    fi
+
+    local perl_script='
+my $t = qr/2160p|1080p|720p|480p|4K|UHD|
+    Blu-?Ray|BDRip|BRRip|WEB-DL|WEBRip|HDTV|DVDRip|DVDScr|AMZN|NF|HULU|DSNP|
+    H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
+    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC|FLAC|MP3|7\.1|5\.1|
+    HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
+    PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
+    YIFY|YTS/xi;
+s/\s*\[[^\]]*\]//g;
+s/\s*\(\s*$t\s*\)\s*//gi;
+s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
+s/[.\-_]{2,}([^.])/$1 ? ".$1" : ""/ge;
+s/[.\-_]+$//;
+s/\s{2,}/ /g;
+s/^\s+|\s+$//g;'
+
+    while IFS= read -r -d '' item; do
+        local parent name new_name
+        parent="$(dirname "$item")"
+        name="$(basename "$item")"
+
+        if ! new_name="$(printf '%s' "$name" | perl -pe "$perl_script" 2>/dev/null)"; then
+            warn "Tag stripping failed on: $name"
+            rename_errors=$((rename_errors + 1))
+            continue
+        fi
+
+        if [[ -n "$new_name" && "$new_name" != "$name" ]]; then
+            if [[ -e "$parent/$new_name" ]]; then
+                warn "Rename skipped (target exists): $name -> $new_name"
+                rename_errors=$((rename_errors + 1))
+                continue
+            fi
+            echo "  Renaming: $name -> $new_name"
+            if ! mv "$item" "$parent/$new_name"; then
+                warn "Could not rename: $item"
+                rename_errors=$((rename_errors + 1))
+            fi
+        fi
+    done < <(find "${find_args[@]}" -print0 2>/dev/null)
+}
+
+apply_title_case() {
+    # Applies title case to filenames and directory names. Minor words (a, an,
+    # the, and, etc.) are kept lowercase unless they start the name. All-uppercase
+    # words (acronyms such as DVD, HD, TV) are left untouched. For files, title
+    # case is applied to the stem only — the extension is preserved as-is.
+    # Usage: apply_title_case <directory> [--recursive] [--dirs]
+    local directory="$1"
+    local recursive=false
+    local dirs_only=false
+    shift 1
+
+    for arg in "$@"; do
+        case "$arg" in
+            --recursive) recursive=true ;;
+            --dirs)      dirs_only=true ;;
+        esac
+    done
+
+    local -a find_args=("$directory")
+
+    if $dirs_only; then
+        find_args+=("-depth" "-mindepth" "1" "-type" "d")
+    else
+        find_args+=("-mindepth" "1")
+        $recursive || find_args+=("-maxdepth" "1")
+        find_args+=("-type" "f")
+    fi
+
+    local perl_script='
+my @minor = qw(a an the and but or nor for so yet at by in of on to up as);
+s/\b(\w+)\b/do{
+    my $orig=$1; my $w=lc($1);
+    ($orig eq uc($orig) && length($orig)>1) ? $orig :
+    (grep{$_ eq $w}@minor) ? $w : ucfirst($w)
+}/ge;
+s/^(\w)/uc($1)/e'
+
+    while IFS= read -r -d '' item; do
+        local parent name stem ext new_name new_stem
+        parent="$(dirname "$item")"
+        name="$(basename "$item")"
+        stem="${name%.*}"
+        ext="${name##*.}"
+
+        if [[ "$stem" == "$name" ]]; then
+            if ! new_name="$(printf '%s' "$name" | perl -pe "$perl_script" 2>/dev/null)"; then
+                warn "Title case failed on: $name"
+                rename_errors=$((rename_errors + 1))
+                continue
+            fi
+        else
+            if ! new_stem="$(printf '%s' "$stem" | perl -pe "$perl_script" 2>/dev/null)"; then
+                warn "Title case failed on: $name"
+                rename_errors=$((rename_errors + 1))
+                continue
+            fi
+            new_name="$new_stem.$ext"
+        fi
+
+        if [[ -n "$new_name" && "$new_name" != "$name" ]]; then
+            if [[ -e "$parent/$new_name" ]]; then
+                warn "Rename skipped (target exists): $name -> $new_name"
+                rename_errors=$((rename_errors + 1))
+                continue
+            fi
+            echo "  Renaming: $name -> $new_name"
+            if ! mv "$item" "$parent/$new_name"; then
+                warn "Could not rename: $item"
+                rename_errors=$((rename_errors + 1))
+            fi
+        fi
+    done < <(find "${find_args[@]}" -print0 2>/dev/null)
+}
+
+remove_title_number() {
+    # Strips HandBrake DVD title number prefixes ("## - name.ext" -> "name.ext").
+    # If stripping would cause a filename collision, appends (1), (2), etc.
+    local filepath filename stem ext new_stem new_name n
+    filepath="$(dirname "$1")"
+    filename="$(basename "$1")"
+    stem="${filename%.*}"
+    ext="${filename##*.}"
+
+    [[ "$stem" =~ ^([0-9]+)[[:space:]]+-[[:space:]]+(.+)$ ]] || return 0
+
+    new_stem="${BASH_REMATCH[2]}"
+    new_name="${new_stem}.${ext}"
+
+    if [[ -f "$filepath/$new_name" ]]; then
+        n=1
+        while [[ -f "$filepath/${new_stem}(${n}).${ext}" ]]; do
+            n=$((n + 1))
+        done
+        new_name="${new_stem}(${n}).${ext}"
+    fi
+
+    echo "  Renaming: $filename -> $new_name"
+    if ! mv "$filepath/$filename" "$filepath/$new_name"; then
+        warn "Could not rename: $filepath/$filename"
+        rename_errors=$((rename_errors + 1))
+    fi
+}
+
+# ----- Argument parsing ------------------------------------------------------
 
 for arg in "$@"; do
     case "$arg" in
         -l|--log)   LOG_ENABLED=true ;;
-        -d|--dvd)   DVD_MODE=true ;;
-        -loren)  PRESET_FILE="$PRESET_DIR/Loren 720.json"; PRESET_NAME="Loren 720" ;;
-        -jack)   PRESET_FILE="$PRESET_DIR/Jack 1080.json"; PRESET_NAME="Jack 1080" ;;
+        -loren)     PRESET_FILE="$PRESET_DIR/Loren 720.json"; PRESET_NAME="Loren 720" ;;
+        -jack)      PRESET_FILE="$PRESET_DIR/Jack 1080.json"; PRESET_NAME="Jack 1080" ;;
         -h|--help)
             printf 'Usage: %s [OPTIONS]\n\n' "$(basename "$0")"
             printf 'Options:\n'
-            printf '  -l, --log   Enable logging to jackify_log.txt\n'
-            printf '  -d, --dvd   Rename HandBrake title numbers on copy ("## - name" -> "DVD Title ##")\n'
-            printf '  -loren      Use Loren 720 preset\n'
             printf '  -jack       Use Jack 1080 preset\n'
+            printf '  -loren      Use Loren 720 preset\n'
+            printf '  -l, --log   Enable logging to jackify_log.txt\n'
             printf '  -h, --help  Show this help message\n'
             exit 0
             ;;
@@ -278,7 +459,7 @@ done
 
 [[ -z "$PRESET_NAME" ]] && die "No preset selected. Use -jack or -loren."
 
-# ----------------------------- INITIALIZATION --------------------------------
+# ----- Initialisation --------------------------------------------------------
 
 clear
 print_header "Jackify"
@@ -286,45 +467,51 @@ echo
 $LOG_ENABLED && echo "Log file: $LOG_FILE"
 log_message "Session started"
 
-# ----------------------------- PREREQUISITES CHECK ---------------------------
-
 echo "Checking prerequisites..."
 echo
 
-check_path "$SOURCE_DIR" "Source directory"
+check_path "$DOWNLOADS_DIR" "Downloads directory"
 check_file "$HANDBRAKE_CLI"  "HandBrake CLI"
 check_file "$PRESET_FILE"    "HandBrake preset file"
 
 echo "[OK] All prerequisites met"
 echo
 
-mkdir -p "$INPUT_DIR"  || die "Could not create input directory: $INPUT_DIR"
-mkdir -p "$OUTPUT_DIR" || die "Could not create output directory: $OUTPUT_DIR"
+mkdir -p "$STAGING_DIR"  || die "Could not create staging directory: $STAGING_DIR"
+mkdir -p "$OUTPUT_DIR"   || die "Could not create output directory: $OUTPUT_DIR"
 
-# ----------------------------- STEP 1: COPY FILES ----------------------------
-
-print_header "STEP 1: Copying Video Files"
+# ----- Step 1: Copy from downloads -------------------------------------------
 
 ext_args=()
 build_ext_args ext_args
 
-while IFS= read -r -d '' file; do
-    copy_file_to_input "$file"
-done < <(find "$SOURCE_DIR" -type f \( "${ext_args[@]}" \) -print0)
+mapfile -d '' downloads_list < <(find "$DOWNLOADS_DIR" -type f \( "${ext_args[@]}" \) -print0)
 
-echo
-echo "Total files copied: $files_copied"
-echo
+if [[ ${#downloads_list[@]} -gt 0 ]]; then
+    print_header "STEP 1: Copying from Downloads"
 
-# ----------------------------- STEP 2: CONVERT VIDEOS ------------------------
+    for file in "${downloads_list[@]}"; do
+        copy_file_to_input "$file"
+    done
+
+    echo
+    echo "Total files copied: $files_copied"
+
+    pause_and_clear
+else
+    echo "Downloads folder is empty — skipping copy, using staging folder."
+    echo
+fi
+
+# ----- Step 2: Convert -------------------------------------------------------
 
 print_header "STEP 2: Converting Videos"
 
-mapfile -d '' video_list < <(find "$INPUT_DIR" -type f \( "${ext_args[@]}" \) -print0)
+mapfile -d '' video_list < <(find "$STAGING_DIR" -type f \( "${ext_args[@]}" \) -print0)
 total_videos=${#video_list[@]}
 
 if [[ $total_videos -eq 0 ]]; then
-    echo "No videos found to process."
+    die "No videos found in staging folder. Nothing to do."
 else
     echo "Found $total_videos video(s) to process"
     echo
@@ -333,28 +520,37 @@ else
     done
 fi
 
-# ----------------------------- STEP 3: CLEANUP NAMES ------------------------
+pause_and_clear
 
-if [[ "${ENABLE_CLEANUP,,}" == "false" ]]; then
-    echo "Name cleanup disabled - skipping"
-else
-    print_header "STEP 3: Cleaning Up Names"
+# ----- Step 3: Clean up names ------------------------------------------------
 
-    echo "Cleaning file names..."
-    # Collapse multiple spaces
-    rename_in_path '\s{2,}' ' ' "$OUTPUT_DIR" --recursive
-    # Replace dots/underscores/hyphens that are not the extension separator
-    rename_in_path '[._-](?=[^.]*\.)' ' ' "$OUTPUT_DIR" --recursive
+print_header "STEP 3: Cleaning Up Names"
 
-    echo "Cleaning folder names..."
-    rename_in_path '[._-]' ' ' "$OUTPUT_DIR" --dirs
-    rename_in_path '\s{2,}' ' ' "$OUTPUT_DIR" --dirs
+while IFS= read -r -d '' file; do
+    remove_title_number "$file"
+done < <(find "$OUTPUT_DIR" -type f -name "*.${OUTPUT_FORMAT}" -print0)
 
-    echo "Cleanup complete!"
-    echo
-fi
+echo "Stripping source tags..."
+strip_source_tags "$OUTPUT_DIR" --recursive
+strip_source_tags "$OUTPUT_DIR" --dirs
 
-# ----------------------------- FINAL REPORT ----------------------------------
+echo "Cleaning file names..."
+rename_in_path '[._-](?=[^.]*\.)' ' ' "$OUTPUT_DIR" --recursive
+rename_in_path '\s{2,}' ' ' "$OUTPUT_DIR" --recursive
+
+echo "Cleaning folder names..."
+rename_in_path '[._-]' ' ' "$OUTPUT_DIR" --dirs
+rename_in_path '\s{2,}' ' ' "$OUTPUT_DIR" --dirs
+
+echo "Applying title case..."
+apply_title_case "$OUTPUT_DIR" --recursive
+apply_title_case "$OUTPUT_DIR" --dirs
+
+echo "Cleanup complete!"
+echo
+pause_and_clear
+
+# ----- Final report ----------------------------------------------------------
 
 print_header "Processing Complete"
 echo
@@ -365,7 +561,7 @@ printf 'Files copied:     %d\n' "$files_copied"
 [[ $videos_failed  -gt 0 ]] && printf 'Videos failed:    %d\n' "$videos_failed"
 [[ $files_failed   -gt 0 ]] && printf 'Copy failures:    %d\n' "$files_failed"
 [[ $rename_errors  -gt 0 ]] && printf 'Rename errors:    %d\n' "$rename_errors"
-[[ "${ENABLE_CLEANUP,,}" == "true" ]] && echo "Name cleanup:     Completed"
+echo "Name cleanup:     Completed"
 echo
 $LOG_ENABLED && echo "Full details available in: $LOG_FILE"
 echo
