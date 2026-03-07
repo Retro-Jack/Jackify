@@ -516,8 +516,9 @@ build_ext_args sub_ext_args SUBTITLE_EXTENSIONS
 media_ext_args=("${ext_args[@]}" "-o" "${sub_ext_args[@]}")
 
 mapfile -d '' downloads_list < <(find "$DOWNLOADS_DIR" -type f \( "${ext_args[@]}" \) -print0)
+mapfile -d '' staging_list  < <(find "$STAGING_DIR"   -type f \( "${ext_args[@]}" \) -print0)
 
-if [[ ${#downloads_list[@]} -gt 0 ]]; then
+if [[ ${#downloads_list[@]} -gt 0 && ${#staging_list[@]} -eq 0 ]]; then
     print_header "STEP 1: Copying from Downloads"
 
     for file in "${downloads_list[@]}"; do
@@ -530,7 +531,11 @@ if [[ ${#downloads_list[@]} -gt 0 ]]; then
 
     countdown_and_clear
 else
-    echo "Downloads folder is empty — skipping copy, using staging folder."
+    if [[ ${#staging_list[@]} -gt 0 && ${#downloads_list[@]} -gt 0 ]]; then
+        echo "Staging folder has files — skipping copy from downloads."
+    else
+        echo "Downloads folder is empty — skipping copy, using staging folder."
+    fi
     echo
     countdown_and_clear
 fi
