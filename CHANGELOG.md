@@ -23,6 +23,7 @@
 
 ### Changed
 - Error log timestamps now use the locale's short date and time format (`%x %X`)
+- If staging already contains files when the script starts, the copy step is skipped regardless of whether downloads also has files — staging always takes priority
 
 ### Fixed
 - Stale `${LOG_ENABLED:+ ...}` reference in `warn` call on HandBrake failure, which would have caused an unbound variable error under `set -u`
