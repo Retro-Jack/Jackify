@@ -15,7 +15,6 @@
 # Options:
 #   -jack       Use Jack 1080 preset (required — no default)
 #   -loren      Use Loren 720 preset (required — no default)
-#   -l, --log   Log output to jackify_log.txt
 #   -h, --help  Show this help message
 # =============================================================================
 
@@ -35,9 +34,9 @@ OUTPUT_FORMAT="mp4"
 PROCESS_DELAY=2
 
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
+SUBTITLE_EXTENSIONS=(srt ass ssa vtt sub idx sup)
 
-LOG_FILE="$OUTPUT_DIR/jackify_log.txt"
-LOG_ENABLED=false
+ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 
 # ----- Counters --------------------------------------------------------------
 
@@ -54,12 +53,23 @@ _current_output=""
 # ----- Functions -------------------------------------------------------------
 
 print_header() {
-    printf '\n==================================================\n'
-    printf '      %s\n' "$1"
-    printf '==================================================\n'
+    local title="$1"
+    local width=$(( ${#title} + 8 ))
+    (( width < 50 )) && width=50
+    local pad=$(( (width - ${#title}) / 2 ))
+    local border
+    border="$(printf '%*s' "$width" '' | tr ' ' '=')"
+    printf '\n%s\n%*s%s\n%s\n' "$border" "$pad" '' "$title" "$border"
 }
 
 pause_and_clear() {
+    echo
+    read -r -s -n1 -p "Press any key to continue . . . "
+    echo
+    clear
+}
+
+countdown_and_clear() {
     # Counts down from 10, then clears. Press any key to skip the wait.
     local i
     echo
@@ -70,25 +80,19 @@ pause_and_clear() {
     clear
 }
 
-log_message() {
-    $LOG_ENABLED || return 0
-    printf '%s - %s\n' "$(date '+%H:%M:%S %d/%m/%Y')" "$1" >> "$LOG_FILE"
-}
-
 die() {
     printf '[ERROR] %s\n' "$1" >&2
-    log_message "ERROR: $1"
+    printf '%s - ERROR: %s\n' "$(date '+%H:%M:%S %d/%m/%Y')" "$1" >> "$ERROR_LOG"
     exit 1
 }
 
 warn() {
     printf '[WARN]  %s\n' "$1" >&2
-    log_message "WARN: $1"
+    printf '%s - WARN: %s\n' "$(date '+%H:%M:%S %d/%m/%Y')" "$1" >> "$ERROR_LOG"
 }
 
 _on_exit() {
     [[ -n "$_current_output" && -f "$_current_output" ]] && rm -f "$_current_output"
-    log_message "Session ended"
 }
 trap '_on_exit' EXIT
 
@@ -101,11 +105,13 @@ check_file() {
 }
 
 build_ext_args() {
-    # Builds a find -name expression matching all VIDEO_EXTENSIONS.
+    # Builds a find -name expression matching all extensions in the named array.
     # Populates the named array variable passed as $1 with the resulting args.
+    # Optionally pass a second argument naming the extensions array (default: VIDEO_EXTENSIONS).
     local -n _out=$1
+    local -n _exts=${2:-VIDEO_EXTENSIONS}
     local first=true
-    for ext in "${VIDEO_EXTENSIONS[@]}"; do
+    for ext in "${_exts[@]}"; do
         if $first; then
             _out+=("-name" "*.${ext}")
             first=false
@@ -139,19 +145,45 @@ copy_file_to_input() {
     fi
 }
 
+show_progress() {
+    local bar_width=40
+    local pct filled empty
+    while IFS= read -r line; do
+        if [[ "$line" =~ ([0-9]+)\.[0-9]+[[:space:]]*% ]]; then
+            pct=${BASH_REMATCH[1]}
+            filled=$(( pct * bar_width / 100 ))
+            empty=$(( bar_width - filled ))
+            printf '\r  [%s] %3d%%' \
+                "$(perl -e "print '█' x $filled . '░' x $empty")" \
+                "$pct"
+        fi
+    done
+    printf '\n'
+}
+
 process_video() {
     # Converts a single video file using HandBrakeCLI. Skips files that have
-    # already been converted. Output streams live to the terminal; --log
-    # additionally tees it to the log file.
+    # already been converted. If the input is the only media file in its
+    # directory, output goes to the root of OUTPUT_DIR; otherwise the relative
+    # path from STAGING_DIR is preserved.
     local input_file="$1"
     local current_num="$2"
     local total_num="$3"
 
-    local relative_path="${input_file#"$STAGING_DIR"/}"
-    local relative_noext="${relative_path%.*}"
-    local output_file="$OUTPUT_DIR/${relative_noext}.${OUTPUT_FORMAT}"
-    local output_dir
-    output_dir="$(dirname "$output_file")"
+    local input_dir
+    input_dir="$(dirname "$input_file")"
+    local sibling_count
+    sibling_count=$(find "$input_dir" -maxdepth 1 -type f \( "${ext_args[@]}" \) | wc -l)
+
+    local output_file output_dir
+    if [[ $sibling_count -eq 1 ]]; then
+        output_file="$OUTPUT_DIR/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
+        output_dir="$OUTPUT_DIR"
+    else
+        local relative_path="${input_file#"$STAGING_DIR"/}"
+        output_file="$OUTPUT_DIR/${relative_path%.*}.${OUTPUT_FORMAT}"
+        output_dir="$(dirname "$output_file")"
+    fi
 
     if ! mkdir -p "$output_dir"; then
         warn "Could not create output directory: $output_dir — skipping $(basename "$input_file")"
@@ -165,47 +197,42 @@ process_video() {
         return
     fi
 
-    clear
-    print_header "Converting Video $current_num of $total_num"
     echo
-    echo "Source: $(basename "$input_file")"
-    echo "Output: $output_file"
-    echo "Preset: $PRESET_NAME"
-    echo
-    echo "Converting (this may take several minutes)..."
-    echo
-
-    log_message "Converting: $(basename "$input_file")"
+    echo "$(basename "$input_file")"
 
     # _current_output is cleared by the EXIT trap on interruption, which
     # removes the partial file. --preset-import-file + --preset are both
     # required to select a named preset from a JSON file.
     local hb_ok
+    printf '  [%s]   0%%' "$(perl -e "print '░' x 40")"
     _current_output="$output_file"
-    if $LOG_ENABLED; then
-        "$HANDBRAKE_CLI" \
-            -i "$input_file" \
-            -o "$output_file" \
-            --preset-import-file "$PRESET_FILE" \
-            --preset "$PRESET_NAME" 2>&1 | tee -a "$LOG_FILE"
-        hb_ok=${PIPESTATUS[0]}
-    else
-        "$HANDBRAKE_CLI" \
-            -i "$input_file" \
-            -o "$output_file" \
-            --preset-import-file "$PRESET_FILE" \
-            --preset "$PRESET_NAME" 2>&1
-        hb_ok=$?
-    fi
+    "$HANDBRAKE_CLI" \
+        -i "$input_file" \
+        -o "$output_file" \
+        --preset-import-file "$PRESET_FILE" \
+        --preset "$PRESET_NAME" 2>&1 | tr '\r' '\n' | show_progress
+    hb_ok=${PIPESTATUS[0]}
 
     if [[ $hb_ok -eq 0 ]]; then
         _current_output=""
         echo "[SUCCESS] Conversion complete"
         videos_converted=$((videos_converted + 1))
+
+        local stem input_dir
+        stem="$(basename "${input_file%.*}")"
+        input_dir="$(dirname "$input_file")"
+        while IFS= read -r -d '' sub; do
+            local sub_name
+            sub_name="$(basename "$sub")"
+            if [[ "${sub_name%.*}" == "$stem" ]]; then
+                echo "  Copying subtitle: $sub_name"
+                cp "$sub" "$output_dir/"
+            fi
+        done < <(find "$input_dir" -type f \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
     else
         _current_output=""
         rm -f "$output_file"
-        warn "HandBrake failed on: $(basename "$input_file")${LOG_ENABLED:+ (see log for details)}"
+        warn "HandBrake failed on: $(basename "$input_file")"
         videos_failed=$((videos_failed + 1))
     fi
 
@@ -239,7 +266,7 @@ rename_in_path() {
     else
         find_args+=("-mindepth" "1")
         $recursive || find_args+=("-maxdepth" "1")
-        find_args+=("-type" "f")
+        find_args+=("-type" "f" "!" "-name" "error_log.txt" "(" "${media_ext_args[@]}" ")")
     fi
 
     while IFS= read -r -d '' item; do
@@ -291,7 +318,7 @@ strip_source_tags() {
     else
         find_args+=("-mindepth" "1")
         $recursive || find_args+=("-maxdepth" "1")
-        find_args+=("-type" "f")
+        find_args+=("-type" "f" "!" "-name" "error_log.txt" "(" "${media_ext_args[@]}" ")")
     fi
 
     local perl_script='
@@ -361,7 +388,7 @@ apply_title_case() {
     else
         find_args+=("-mindepth" "1")
         $recursive || find_args+=("-maxdepth" "1")
-        find_args+=("-type" "f")
+        find_args+=("-type" "f" "!" "-name" "error_log.txt" "(" "${media_ext_args[@]}" ")")
     fi
 
     local perl_script='
@@ -371,6 +398,7 @@ s/\b(\w+)\b/do{
     ($orig eq uc($orig) && length($orig)>1) ? $orig :
     (grep{$_ eq $w}@minor) ? $w : ucfirst($w)
 }/ge;
+s/(?<=\d) ([a-z]\w*)/" ".ucfirst($1)/ge;
 s/^(\w)/uc($1)/e'
 
     while IFS= read -r -d '' item; do
@@ -443,7 +471,6 @@ remove_title_number() {
 
 for arg in "$@"; do
     case "$arg" in
-        -l|--log)   LOG_ENABLED=true ;;
         -loren)     PRESET_FILE="$PRESET_DIR/Loren 720.json"; PRESET_NAME="Loren 720" ;;
         -jack)      PRESET_FILE="$PRESET_DIR/Jack 1080.json"; PRESET_NAME="Jack 1080" ;;
         -h|--help)
@@ -451,7 +478,6 @@ for arg in "$@"; do
             printf 'Options:\n'
             printf '  -jack       Use Jack 1080 preset\n'
             printf '  -loren      Use Loren 720 preset\n'
-            printf '  -l, --log   Enable logging to jackify_log.txt\n'
             printf '  -h, --help  Show this help message\n'
             exit 0
             ;;
@@ -466,9 +492,6 @@ done
 clear
 print_header "Jackify"
 echo
-$LOG_ENABLED && echo "Log file: $LOG_FILE"
-log_message "Session started"
-
 echo "Checking prerequisites..."
 echo
 
@@ -487,6 +510,11 @@ mkdir -p "$OUTPUT_DIR"   || die "Could not create output directory: $OUTPUT_DIR"
 ext_args=()
 build_ext_args ext_args
 
+sub_ext_args=()
+build_ext_args sub_ext_args SUBTITLE_EXTENSIONS
+
+media_ext_args=("${ext_args[@]}" "-o" "${sub_ext_args[@]}")
+
 mapfile -d '' downloads_list < <(find "$DOWNLOADS_DIR" -type f \( "${ext_args[@]}" \) -print0)
 
 if [[ ${#downloads_list[@]} -gt 0 ]]; then
@@ -496,15 +524,18 @@ if [[ ${#downloads_list[@]} -gt 0 ]]; then
         copy_file_to_input "$file"
     done
 
-    pause_and_clear
+    while IFS= read -r -d '' sub; do
+        copy_file_to_input "$sub"
+    done < <(find "$DOWNLOADS_DIR" -type f \( "${sub_ext_args[@]}" \) -print0)
+
+    countdown_and_clear
 else
     echo "Downloads folder is empty — skipping copy, using staging folder."
     echo
+    countdown_and_clear
 fi
 
 # ----- Step 2: Convert -------------------------------------------------------
-
-print_header "STEP 2: Converting Videos"
 
 mapfile -d '' video_list < <(find "$STAGING_DIR" -type f \( "${ext_args[@]}" \) -print0)
 total_videos=${#video_list[@]}
@@ -512,7 +543,7 @@ total_videos=${#video_list[@]}
 if [[ $total_videos -eq 0 ]]; then
     die "No videos found in staging folder. Nothing to do."
 else
-    echo "Found $total_videos video(s) to process"
+    print_header "STEP 2: Converting $total_videos $([ "$total_videos" -eq 1 ] && echo video || echo videos) - Preset: $PRESET_NAME"
     echo
     for ((i = 0; i < total_videos; i++)); do
         process_video "${video_list[$i]}" $((i + 1)) "$total_videos"
@@ -532,18 +563,22 @@ done < <(find "$OUTPUT_DIR" -type f -name "*.${OUTPUT_FORMAT}" -print0)
 echo "Stripping source tags..."
 strip_source_tags "$OUTPUT_DIR" --recursive
 strip_source_tags "$OUTPUT_DIR" --dirs
+echo
 
 echo "Cleaning file names..."
 rename_in_path '[._-](?=[^.]*\.)' ' ' "$OUTPUT_DIR" --recursive
 rename_in_path '\s{2,}' ' ' "$OUTPUT_DIR" --recursive
+echo
 
 echo "Cleaning folder names..."
 rename_in_path '[._-]' ' ' "$OUTPUT_DIR" --dirs
 rename_in_path '\s{2,}' ' ' "$OUTPUT_DIR" --dirs
+echo
 
 echo "Applying title case..."
 apply_title_case "$OUTPUT_DIR" --recursive
 apply_title_case "$OUTPUT_DIR" --dirs
+echo
 
 echo "Cleanup complete!"
 echo
@@ -561,7 +596,7 @@ printf 'Videos skipped:   %d\n' "$videos_skipped"
 [[ $rename_errors  -gt 0 ]] && printf 'Rename errors:    %d\n' "$rename_errors"
 echo "Name cleanup:     Completed"
 echo
-$LOG_ENABLED && echo "Full details available in: $LOG_FILE"
+[[ -f "$ERROR_LOG" ]] && echo "Errors logged to: $ERROR_LOG"
 echo
 
 read -r -p "Clean staging folder? [y/N] " answer

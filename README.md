@@ -1,10 +1,11 @@
 # Jackify
 
-A bash script that automates video conversion using HandBrakeCLI. It copies videos from a downloads folder to a staging folder (preserving directory structure), converts them using a named HandBrake preset, outputs them, then cleans up file and folder names.
+A bash script that automates video conversion using HandBrakeCLI. It copies videos and subtitles from a downloads folder to a staging folder (preserving directory structure), converts them using a named HandBrake preset, then cleans up file and folder names in the output.
 
 ## Requirements
 
 - [HandBrakeCLI](https://handbrake.fr/downloads2.php) — note this is a separate package from the HandBrake GUI and must be installed independently
+- `perl` — used for filename cleanup and the progress bar (standard on most Linux systems)
 
 ## Configuration
 
@@ -34,7 +35,6 @@ A preset **must** be specified on every run to prevent mistakes.
 |---|---|
 | `-jack` | Use the Jack 1080 preset |
 | `-loren` | Use the Loren 720 preset |
-| `-l, --log` | Enable logging to `jackify_log.txt` |
 | `-h, --help` | Show help message |
 
 ### Examples
@@ -43,16 +43,18 @@ A preset **must** be specified on every run to prevent mistakes.
 # Convert using the Jack 1080 preset
 jackify.sh -jack
 
-# Convert using the Loren 720 preset, with logging
-jackify.sh -loren --log
+# Convert using the Loren 720 preset
+jackify.sh -loren
 ```
 
 ## How It Works
 
-1. **Copy** — Videos are copied from your downloads folder (`DOWNLOADS_DIR`) to `STAGING_DIR`, preserving folder structure. Already-copied files are skipped. If `DOWNLOADS_DIR` is empty, this step is skipped and existing files in `STAGING_DIR` are used instead.
-2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. Already-converted files are skipped.
+1. **Copy** — Videos and subtitle files are copied from `DOWNLOADS_DIR` to `STAGING_DIR`, preserving folder structure. Already-copied files are skipped. If `DOWNLOADS_DIR` is empty, this step is skipped and existing files in `STAGING_DIR` are used instead.
+2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. A progress bar is shown for each conversion. Already-converted files are skipped. If a video is the only media file in its directory, the output is placed directly in `OUTPUT_DIR` rather than recreating the subdirectory. Matching subtitle files are copied alongside the converted video.
 3. **Cleanup** — Output filenames and folder names are cleaned: DVD title number prefixes (`## - name`) are stripped, known source/release tags are removed, dots/underscores/hyphens used as word separators are replaced with spaces, and title case is applied.
 4. **Staging cleanup** — After the final report, you are prompted whether to delete the contents of `STAGING_DIR`.
+
+If any warnings or errors occur during a run, they are logged to `error_log.txt` in `OUTPUT_DIR`.
 
 ## Presets
 
