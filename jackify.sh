@@ -82,13 +82,13 @@ countdown_and_clear() {
 
 die() {
     printf '[ERROR] %s\n' "$1" >&2
-    printf '%s - ERROR: %s\n' "$(date '+%H:%M:%S %d/%m/%Y')" "$1" >> "$ERROR_LOG"
+    printf '%s - ERROR: %s\n' "$(date '+%c')" "$1" >> "$ERROR_LOG"
     exit 1
 }
 
 warn() {
     printf '[WARN]  %s\n' "$1" >&2
-    printf '%s - WARN: %s\n' "$(date '+%H:%M:%S %d/%m/%Y')" "$1" >> "$ERROR_LOG"
+    printf '%s - WARN: %s\n' "$(date '+%c')" "$1" >> "$ERROR_LOG"
 }
 
 _on_exit() {
