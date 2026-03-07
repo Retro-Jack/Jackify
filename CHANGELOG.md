@@ -21,6 +21,9 @@
 - **`build_ext_args`** generalised to accept any named extensions array via an optional second argument (default: `VIDEO_EXTENSIONS`)
 - **Single video** — Step 2 header now reads "video" instead of "videos" when only one file is being converted
 
+### Changed
+- Error log timestamps now use the locale's short date and time format (`%x %X`)
+
 ### Fixed
 - Stale `${LOG_ENABLED:+ ...}` reference in `warn` call on HandBrake failure, which would have caused an unbound variable error under `set -u`
 - Outdated `build_ext_args` comment still referencing `VIDEO_EXTENSIONS` specifically
