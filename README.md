@@ -1,5 +1,7 @@
 # Jackify
 
+[![Latest Release](https://img.shields.io/github/v/release/Retro-Jack/Jackify)](https://github.com/Retro-Jack/Jackify/releases/latest)
+
 A bash script that automates video conversion using HandBrakeCLI. It copies videos and subtitles from a downloads folder to a staging folder (preserving directory structure), converts them using a named HandBrake preset, then cleans up file and folder names in the output.
 
 ## Requirements
