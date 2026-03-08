@@ -325,7 +325,7 @@ strip_source_tags() {
 my $t = qr/2160p|1080p|720p|480p|4K|UHD|
     Blu-?Ray|BDRip|BRRip|WEB-DL|WEBRip|HDTV|DVDRip|DVDScr|AMZN|NF|HULU|DSNP|
     H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
-    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC|FLAC|MP3|7\.1|5\.1|
+    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC|MP3|7\.1|5\.1|
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
     YIFY|YTS/xi;
@@ -395,7 +395,7 @@ apply_title_case() {
 my @minor = qw(a an the and but or nor for so yet at by in of on to up as);
 s/\b(\w+)\b/do{
     my $orig=$1; my $w=lc($1);
-    ($orig eq uc($orig) && length($orig)>1) ? $orig :
+    ($orig eq uc($orig) && length($orig)>1 && length($orig)<=4 && !grep{$_ eq lc($orig)}@minor) ? $orig :
     (grep{$_ eq $w}@minor) ? $w : ucfirst($w)
 }/ge;
 s/(?<=\d) ([a-z]\w*)/" ".ucfirst($1)/ge;
