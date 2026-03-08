@@ -35,6 +35,7 @@ PROCESS_DELAY=2
 
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
 SUBTITLE_EXTENSIONS=(srt ass ssa vtt sub idx sup)
+EXCLUDED_BASENAMES=(sample preview trailer featurette)
 
 ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 
@@ -121,6 +122,15 @@ build_ext_args() {
     done
 }
 
+build_exclude_args() {
+    # Builds find ! -iname args for each basename in EXCLUDED_BASENAMES.
+    # Populates the named array variable passed as $1.
+    local -n _out=$1
+    for name in "${EXCLUDED_BASENAMES[@]}"; do
+        _out+=("!" "-iname" "${name}.*")
+    done
+}
+
 copy_file_to_input() {
     # Copies a single file from DOWNLOADS_DIR to STAGING_DIR, preserving its
     # relative path.
@@ -158,7 +168,7 @@ show_progress() {
                 "$pct"
         fi
     done
-    printf '\n'
+    printf '\r  [%s] 100%%\n' "$(perl -e "print '█' x $bar_width")"
 }
 
 process_video() {
@@ -173,12 +183,19 @@ process_video() {
     local input_dir
     input_dir="$(dirname "$input_file")"
     local sibling_count
-    sibling_count=$(find "$input_dir" -maxdepth 1 -type f \( "${ext_args[@]}" \) | wc -l)
+    sibling_count=$(find "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) | wc -l)
 
     local output_file output_dir
     if [[ $sibling_count -eq 1 ]]; then
-        output_file="$OUTPUT_DIR/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
-        output_dir="$OUTPUT_DIR"
+        local sub_count
+        sub_count=$(find "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
+        if [[ $sub_count -gt 0 && "$input_dir" != "$STAGING_DIR" ]]; then
+            output_dir="$OUTPUT_DIR/$(basename "$input_dir")"
+            output_file="$output_dir/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
+        else
+            output_file="$OUTPUT_DIR/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
+            output_dir="$OUTPUT_DIR"
+        fi
     else
         local relative_path="${input_file#"$STAGING_DIR"/}"
         output_file="$OUTPUT_DIR/${relative_path%.*}.${OUTPUT_FORMAT}"
@@ -228,7 +245,7 @@ process_video() {
                 echo "  Copying subtitle: $sub_name"
                 cp "$sub" "$output_dir/"
             fi
-        done < <(find "$input_dir" -type f \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
+        done < <(find "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
     else
         _current_output=""
         rm -f "$output_file"
@@ -513,10 +530,13 @@ build_ext_args ext_args
 sub_ext_args=()
 build_ext_args sub_ext_args SUBTITLE_EXTENSIONS
 
+exclude_args=()
+build_exclude_args exclude_args
+
 media_ext_args=("${ext_args[@]}" "-o" "${sub_ext_args[@]}")
 
-mapfile -d '' downloads_list < <(find "$DOWNLOADS_DIR" -type f \( "${ext_args[@]}" \) -print0)
-mapfile -d '' staging_list  < <(find "$STAGING_DIR"   -type f \( "${ext_args[@]}" \) -print0)
+mapfile -d '' downloads_list < <(find "$DOWNLOADS_DIR" -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
+mapfile -d '' staging_list  < <(find "$STAGING_DIR"   -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
 
 if [[ ${#downloads_list[@]} -gt 0 && ${#staging_list[@]} -eq 0 ]]; then
     print_header "STEP 1: Copying from Downloads"
@@ -527,7 +547,7 @@ if [[ ${#downloads_list[@]} -gt 0 && ${#staging_list[@]} -eq 0 ]]; then
 
     while IFS= read -r -d '' sub; do
         copy_file_to_input "$sub"
-    done < <(find "$DOWNLOADS_DIR" -type f \( "${sub_ext_args[@]}" \) -print0)
+    done < <(find "$DOWNLOADS_DIR" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0)
 
     countdown_and_clear
 else
@@ -542,7 +562,7 @@ fi
 
 # ----- Step 2: Convert -------------------------------------------------------
 
-mapfile -d '' video_list < <(find "$STAGING_DIR" -type f \( "${ext_args[@]}" \) -print0)
+mapfile -d '' video_list < <(find "$STAGING_DIR" -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
 total_videos=${#video_list[@]}
 
 if [[ $total_videos -eq 0 ]]; then
