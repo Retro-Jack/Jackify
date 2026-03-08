@@ -179,12 +179,12 @@ process_video() {
     local input_dir
     input_dir="$(dirname "$input_file")"
     local sibling_count
-    sibling_count=$(find "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) | wc -l)
+    sibling_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) | wc -l)
 
     local output_file output_dir
     if [[ $sibling_count -eq 1 ]]; then
         local sub_count
-        sub_count=$(find "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
+        sub_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
         if [[ $sub_count -gt 0 && "$input_dir" != "$STAGING_DIR" ]]; then
             output_dir="$OUTPUT_DIR/$(basename "$input_dir")"
             output_file="$output_dir/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
@@ -241,7 +241,7 @@ process_video() {
                 echo "  Copying subtitle: $sub_name"
                 cp "$sub" "$output_dir/"
             fi
-        done < <(find "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
+        done < <(find -L "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
     else
         _current_output=""
         rm -f "$output_file"
@@ -553,8 +553,8 @@ build_exclude_args exclude_args
 
 media_ext_args=("${ext_args[@]}" "-o" "${sub_ext_args[@]}")
 
-mapfile -d '' downloads_list < <(find "$DOWNLOADS_DIR" -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
-mapfile -d '' staging_list  < <(find "$STAGING_DIR"   -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
+mapfile -d '' downloads_list < <(find -L "$DOWNLOADS_DIR" -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
+mapfile -d '' staging_list  < <(find -L "$STAGING_DIR"   -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
 
 if [[ ${#downloads_list[@]} -gt 0 && ${#staging_list[@]} -eq 0 ]]; then
     print_header "STEP 1: Copying from Downloads"
@@ -565,7 +565,7 @@ if [[ ${#downloads_list[@]} -gt 0 && ${#staging_list[@]} -eq 0 ]]; then
 
     while IFS= read -r -d '' sub; do
         copy_file_to_input "$sub"
-    done < <(find "$DOWNLOADS_DIR" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0)
+    done < <(find -L "$DOWNLOADS_DIR" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0)
 
     countdown_and_clear
 else
@@ -580,7 +580,7 @@ fi
 
 # ----- Step 2: Convert -------------------------------------------------------
 
-mapfile -d '' video_list < <(find "$STAGING_DIR" -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
+mapfile -d '' video_list < <(find -L "$STAGING_DIR" -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
 total_videos=${#video_list[@]}
 
 if [[ $total_videos -eq 0 ]]; then
