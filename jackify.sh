@@ -24,7 +24,8 @@ DOWNLOADS_DIR="/mnt/misc/Downloads/_Torrents/Finished/Files"
 STAGING_DIR="/mnt/multimedia/Conversion/Handbrake/1) Staging"
 OUTPUT_DIR="/mnt/multimedia/Conversion/Handbrake/2) Done"
 HANDBRAKE_CLI="/usr/bin/HandBrakeCLI"
-PRESET_DIR="/mnt/applications/Linux Applications/_Handy Scripts/Jackify/Handbrake Presets"
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+PRESET_DIR="$SCRIPT_DIR/Handbrake Presets"
 
 OUTPUT_FORMAT="mp4"
 PROCESS_DELAY=2
