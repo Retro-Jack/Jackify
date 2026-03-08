@@ -12,10 +12,8 @@
 #
 # Requires: HandBrakeCLI  (other dependencies are standard on any Linux system)
 #
-# Options:
-#   -jack       Use Jack 1080 preset (required — no default)
-#   -loren      Use Loren 720 preset (required — no default)
-#   -h, --help  Show this help message
+# Preset selection is interactive: all JSON files in PRESET_DIR are listed
+# and the user picks one by number at startup.
 # =============================================================================
 
 set -uo pipefail
@@ -27,8 +25,6 @@ STAGING_DIR="/mnt/multimedia/Conversion/Handbrake/1) Staging"
 OUTPUT_DIR="/mnt/multimedia/Conversion/Handbrake/2) Done"
 HANDBRAKE_CLI="/usr/bin/HandBrakeCLI"
 PRESET_DIR="/mnt/applications/Linux Applications/_Handy Scripts/Jackify/Handbrake Presets"
-PRESET_FILE=""
-PRESET_NAME=""
 
 OUTPUT_FORMAT="mp4"
 PROCESS_DELAY=2
@@ -484,25 +480,41 @@ remove_title_number() {
     fi
 }
 
-# ----- Argument parsing ------------------------------------------------------
+select_preset() {
+    # Scans PRESET_DIR for JSON files, extracts each preset's name, and presents
+    # a numbered menu. Sets PRESET_FILE and PRESET_NAME from the user's choice.
+    local -a preset_files preset_names
+    local file name
 
-for arg in "$@"; do
-    case "$arg" in
-        -loren)     PRESET_FILE="$PRESET_DIR/Loren 720.json"; PRESET_NAME="Loren 720" ;;
-        -jack)      PRESET_FILE="$PRESET_DIR/Jack 1080.json"; PRESET_NAME="Jack 1080" ;;
-        -h|--help)
-            printf 'Usage: %s [OPTIONS]\n\n' "$(basename "$0")"
-            printf 'Options:\n'
-            printf '  -jack       Use Jack 1080 preset\n'
-            printf '  -loren      Use Loren 720 preset\n'
-            printf '  -h, --help  Show this help message\n'
-            exit 0
-            ;;
-        *) die "Unknown argument: $arg" ;;
-    esac
-done
+    while IFS= read -r -d '' file; do
+        name="$(perl -ne 'print "$1\n" if /"PresetName"\s*:\s*"([^"]+)"/' "$file")"
+        if [[ -n "$name" ]]; then
+            preset_files+=("$file")
+            preset_names+=("$name")
+        fi
+    done < <(find "$PRESET_DIR" -maxdepth 1 -name "*.json" -print0 2>/dev/null | sort -z)
 
-[[ -z "$PRESET_NAME" ]] && die "No preset selected. Use -jack or -loren."
+    [[ ${#preset_files[@]} -eq 0 ]] && die "No preset files found in: $PRESET_DIR"
+
+    echo "Choose preset:"
+    local i
+    for ((i = 0; i < ${#preset_names[@]}; i++)); do
+        printf '  %d) %s\n' $((i + 1)) "${preset_names[$i]}"
+    done
+    echo
+
+    local choice
+    while true; do
+        read -r -p "Enter number: " choice
+        if [[ "$choice" =~ ^[0-9]+$ && $choice -ge 1 && $choice -le ${#preset_files[@]} ]]; then
+            PRESET_FILE="${preset_files[$((choice - 1))]}"
+            PRESET_NAME="${preset_names[$((choice - 1))]}"
+            break
+        fi
+        echo "Invalid choice, try again."
+    done
+}
+
 
 # ----- Initialisation --------------------------------------------------------
 
@@ -514,9 +526,15 @@ echo
 
 check_path "$DOWNLOADS_DIR" "Downloads directory"
 check_file "$HANDBRAKE_CLI"  "HandBrake CLI"
-check_file "$PRESET_FILE"    "HandBrake preset file"
+check_path "$PRESET_DIR"     "Preset directory"
 
-echo "[OK] All prerequisites met"
+echo "[OK] Prerequisites met"
+echo
+select_preset
+echo
+
+check_file "$PRESET_FILE" "HandBrake preset file"
+echo "[OK] Preset: $PRESET_NAME"
 echo
 
 mkdir -p "$STAGING_DIR"  || die "Could not create staging directory: $STAGING_DIR"

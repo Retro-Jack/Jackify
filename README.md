@@ -27,28 +27,10 @@ Edit the variables at the top of `jackify.sh` to match your environment:
 ## Usage
 
 ```bash
-jackify.sh [OPTIONS]
+jackify.sh
 ```
 
-A preset **must** be specified on every run to prevent mistakes.
-
-### Options
-
-| Flag | Description |
-|---|---|
-| `-jack` | Use the Jack 1080 preset |
-| `-loren` | Use the Loren 720 preset |
-| `-h, --help` | Show help message |
-
-### Examples
-
-```bash
-# Convert using the Jack 1080 preset
-jackify.sh -jack
-
-# Convert using the Loren 720 preset
-jackify.sh -loren
-```
+Run with no arguments. On startup, Jackify scans `PRESET_DIR` for HandBrake preset JSON files and presents a numbered menu to choose from before proceeding.
 
 ## How It Works
 
@@ -61,6 +43,6 @@ If any warnings or errors occur during a run, they are logged to `error_log.txt`
 
 ## Presets
 
-Preset JSON files live in the `Handbrake Presets/` folder. Each file contains a single HandBrake preset exported from the HandBrake GUI. The `-jack` and `-loren` flags select between them.
+Preset JSON files live in the `Handbrake Presets/` folder. Each file contains a single HandBrake preset exported from the HandBrake GUI. The preset name is read from the `PresetName` field inside the JSON.
 
-To add a new preset: export it from HandBrake GUI, drop the JSON into `Handbrake Presets/`, and add a corresponding flag to the argument parsing section of `jackify.sh`.
+To add a new preset: export it from HandBrake GUI and drop the JSON into `Handbrake Presets/`. It will appear in the menu automatically on the next run.
