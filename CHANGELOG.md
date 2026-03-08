@@ -1,6 +1,12 @@
 # Changelog
 
-## 2026-03-08
+## v1.0.1 — 2026-03-08
+
+### Fixed
+- **Source tag stripping** — `AAC5.1` (and similar codec+channel combos) was not being stripped because the word-boundary guards prevented `AAC` and `5.1` from matching when adjacent to each other; `AAC` in the tag pattern now greedily consumes a trailing channel suffix (`AAC(?:\d+\.\d+)?`)
+- **Title case** — all-uppercase filenames (e.g. `THE GENISES CHILDREN`) were incorrectly treated as acronyms and left unchanged; the acronym heuristic now only applies to words of 4 characters or fewer that are not minor words
+
+## v1.0.0 — 2026-03-08
 
 ### Added
 - **Subtitle support** — subtitle files (srt, ass, ssa, vtt, sub, idx, sup) are now copied from `DOWNLOADS_DIR` to `STAGING_DIR` alongside videos, and from `STAGING_DIR` to the appropriate output path after each successful conversion, matched by filename stem
