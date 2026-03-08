@@ -613,6 +613,7 @@ pause_and_clear
 
 print_header "Processing Complete"
 echo
+printf 'Preset:           %s\n' "$PRESET_NAME"
 printf 'Videos found:     %d\n' "$total_videos"
 printf 'Videos converted: %d\n' "$videos_converted"
 printf 'Videos skipped:   %d\n' "$videos_skipped"
