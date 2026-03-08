@@ -22,6 +22,7 @@ Edit the variables at the top of `jackify.sh` to match your environment:
 | `PRESET_DIR` | Folder containing HandBrake preset JSON files |
 | `OUTPUT_FORMAT` | Output container format (default: `mp4`) |
 | `PROCESS_DELAY` | Seconds to pause between conversions (default: `2`) |
+| `EXCLUDED_BASENAMES` | Filenames (without extension) to skip entirely, e.g. `sample`, `preview` (default: `sample preview trailer featurette`) |
 
 ## Usage
 
@@ -51,8 +52,8 @@ jackify.sh -loren
 
 ## How It Works
 
-1. **Copy** — Videos and subtitle files are copied from `DOWNLOADS_DIR` to `STAGING_DIR`, preserving folder structure. Already-copied files are skipped. If `DOWNLOADS_DIR` is empty, this step is skipped and existing files in `STAGING_DIR` are used instead.
-2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. A progress bar is shown for each conversion. Already-converted files are skipped. If a video is the only media file in its directory, the output is placed directly in `OUTPUT_DIR` rather than recreating the subdirectory. Matching subtitle files are copied alongside the converted video.
+1. **Copy** — Videos and subtitle files are copied from `DOWNLOADS_DIR` to `STAGING_DIR`, preserving folder structure. Already-copied files are skipped. Files whose base name matches `EXCLUDED_BASENAMES` (e.g. `sample.mkv`, `trailer.mp4`) are ignored at every stage. If `DOWNLOADS_DIR` is empty, this step is skipped and existing files in `STAGING_DIR` are used instead.
+2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. A progress bar is shown for each conversion. Already-converted files are skipped. If a video is the only media file in its directory and has no subtitle file alongside it, the output is placed directly in `OUTPUT_DIR`; if a subtitle is present, the source folder is recreated in `OUTPUT_DIR` and both files are placed inside it. Matching subtitle files are copied alongside the converted video.
 3. **Cleanup** — Output filenames and folder names are cleaned: DVD title number prefixes (`## - name`) are stripped, known source/release tags are removed, dots/underscores/hyphens used as word separators are replaced with spaces, and title case is applied.
 4. **Staging cleanup** — After the final report, you are prompted whether to delete the contents of `STAGING_DIR`.
 
