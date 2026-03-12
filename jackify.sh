@@ -127,6 +127,55 @@ build_exclude_args() {
     done
 }
 
+_parse_find_opts() {
+    # Parses --recursive and --dirs flags into named boolean variables.
+    # Usage: _parse_find_opts <recursive_var> <dirs_only_var> "$@"
+    local -n _r=$1 _d=$2
+    shift 2
+    for arg in "$@"; do
+        case "$arg" in
+            --recursive) _r=true ;;
+            --dirs)      _d=true ;;
+        esac
+    done
+}
+
+_build_find_args() {
+    # Populates a named array with find arguments for cleanup functions.
+    # Usage: _build_find_args <array_var> <directory> <recursive> <dirs_only>
+    local -n _fa=$1
+    local directory="$2" recursive="$3" dirs_only="$4"
+    _fa=("$directory")
+    if $dirs_only; then
+        _fa+=("-depth" "-mindepth" "1" "-type" "d")
+    else
+        _fa+=("-mindepth" "1")
+        $recursive || _fa+=("-maxdepth" "1")
+        _fa+=("-type" "f" "!" "-name" "error_log.txt" "(" "${media_ext_args[@]}" ")")
+    fi
+}
+
+do_rename() {
+    # Renames a file or directory to a new name within the same parent directory.
+    # Skips if new_name is empty, unchanged, or would collide with an existing path.
+    # Usage: do_rename <item> <new_name>
+    local item="$1" new_name="$2"
+    local parent name
+    parent="$(dirname "$item")"
+    name="$(basename "$item")"
+    [[ -n "$new_name" && "$new_name" != "$name" ]] || return 0
+    if [[ -e "$parent/$new_name" ]]; then
+        warn "Rename skipped (target exists): $name -> $new_name"
+        rename_errors=$((rename_errors + 1))
+        return 0
+    fi
+    echo "  Renaming: $name -> $new_name"
+    if ! mv "$item" "$parent/$new_name"; then
+        warn "Could not rename: $item"
+        rename_errors=$((rename_errors + 1))
+    fi
+}
+
 copy_file_to_input() {
     # Copies a single file from DOWNLOADS_DIR to STAGING_DIR, preserving its
     # relative path.
@@ -239,7 +288,9 @@ process_video() {
             sub_name="$(basename "$sub")"
             if [[ "${sub_name%.*}" == "$stem" ]]; then
                 echo "  Copying subtitle: $sub_name"
-                cp "$sub" "$output_dir/"
+                if ! cp "$sub" "$output_dir/"; then
+                    warn "Subtitle copy failed: $sub_name"
+                fi
             fi
         done < <(find -L "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
     else
@@ -258,52 +309,23 @@ rename_in_path() {
     #
     # --dirs recurses with -depth so children are renamed before parents, preventing
     # path invalidation when a parent directory is renamed mid-traversal.
-    local pattern="$1"
-    local replacement="$2"
-    local directory="$3"
-    local recursive=false
-    local dirs_only=false
+    local pattern="$1" replacement="$2" directory="$3"
+    local recursive=false dirs_only=false
     shift 3
+    _parse_find_opts recursive dirs_only "$@"
 
-    for arg in "$@"; do
-        case "$arg" in
-            --recursive) recursive=true ;;
-            --dirs)      dirs_only=true ;;
-        esac
-    done
-
-    local -a find_args=("$directory")
-
-    if $dirs_only; then
-        find_args+=("-depth" "-mindepth" "1" "-type" "d")
-    else
-        find_args+=("-mindepth" "1")
-        $recursive || find_args+=("-maxdepth" "1")
-        find_args+=("-type" "f" "!" "-name" "error_log.txt" "(" "${media_ext_args[@]}" ")")
-    fi
+    local -a find_args
+    _build_find_args find_args "$directory" "$recursive" "$dirs_only"
 
     while IFS= read -r -d '' item; do
-        local parent name new_name
-        parent="$(dirname "$item")"
+        local name new_name
         name="$(basename "$item")"
         if ! new_name="$(printf '%s' "$name" | perl -pe "s/$pattern/$replacement/gi; s/[. ]+\$//" 2>/dev/null)"; then
             warn "Perl regex failed on: $name (pattern: $pattern)"
             rename_errors=$((rename_errors + 1))
             continue
         fi
-
-        if [[ -n "$new_name" && "$new_name" != "$name" ]]; then
-            if [[ -e "$parent/$new_name" ]]; then
-                warn "Rename skipped (target exists): $name -> $new_name"
-                rename_errors=$((rename_errors + 1))
-                continue
-            fi
-            echo "  Renaming: $name -> $new_name"
-            if ! mv "$item" "$parent/$new_name"; then
-                warn "Could not rename: $item"
-                rename_errors=$((rename_errors + 1))
-            fi
-        fi
+        do_rename "$item" "$new_name"
     done < <(find "${find_args[@]}" -print0 2>/dev/null)
 }
 
@@ -314,25 +336,12 @@ strip_source_tags() {
     # Orphaned separators left behind are cleaned up afterwards.
     # Usage: strip_source_tags <directory> [--recursive] [--dirs]
     local directory="$1"
-    local recursive=false
-    local dirs_only=false
+    local recursive=false dirs_only=false
     shift 1
+    _parse_find_opts recursive dirs_only "$@"
 
-    for arg in "$@"; do
-        case "$arg" in
-            --recursive) recursive=true ;;
-            --dirs)      dirs_only=true ;;
-        esac
-    done
-
-    local -a find_args=("$directory")
-    if $dirs_only; then
-        find_args+=("-depth" "-mindepth" "1" "-type" "d")
-    else
-        find_args+=("-mindepth" "1")
-        $recursive || find_args+=("-maxdepth" "1")
-        find_args+=("-type" "f" "!" "-name" "error_log.txt" "(" "${media_ext_args[@]}" ")")
-    fi
+    local -a find_args
+    _build_find_args find_args "$directory" "$recursive" "$dirs_only"
 
     local perl_script='
 my $t = qr/2160p|1080p|720p|480p|4K|UHD|
@@ -351,28 +360,14 @@ s/\s{2,}/ /g;
 s/^\s+|\s+$//g;'
 
     while IFS= read -r -d '' item; do
-        local parent name new_name
-        parent="$(dirname "$item")"
+        local name new_name
         name="$(basename "$item")"
-
         if ! new_name="$(printf '%s' "$name" | perl -pe "$perl_script" 2>/dev/null)"; then
             warn "Tag stripping failed on: $name"
             rename_errors=$((rename_errors + 1))
             continue
         fi
-
-        if [[ -n "$new_name" && "$new_name" != "$name" ]]; then
-            if [[ -e "$parent/$new_name" ]]; then
-                warn "Rename skipped (target exists): $name -> $new_name"
-                rename_errors=$((rename_errors + 1))
-                continue
-            fi
-            echo "  Renaming: $name -> $new_name"
-            if ! mv "$item" "$parent/$new_name"; then
-                warn "Could not rename: $item"
-                rename_errors=$((rename_errors + 1))
-            fi
-        fi
+        do_rename "$item" "$new_name"
     done < <(find "${find_args[@]}" -print0 2>/dev/null)
 }
 
@@ -383,26 +378,12 @@ apply_title_case() {
     # case is applied to the stem only — the extension is preserved as-is.
     # Usage: apply_title_case <directory> [--recursive] [--dirs]
     local directory="$1"
-    local recursive=false
-    local dirs_only=false
+    local recursive=false dirs_only=false
     shift 1
+    _parse_find_opts recursive dirs_only "$@"
 
-    for arg in "$@"; do
-        case "$arg" in
-            --recursive) recursive=true ;;
-            --dirs)      dirs_only=true ;;
-        esac
-    done
-
-    local -a find_args=("$directory")
-
-    if $dirs_only; then
-        find_args+=("-depth" "-mindepth" "1" "-type" "d")
-    else
-        find_args+=("-mindepth" "1")
-        $recursive || find_args+=("-maxdepth" "1")
-        find_args+=("-type" "f" "!" "-name" "error_log.txt" "(" "${media_ext_args[@]}" ")")
-    fi
+    local -a find_args
+    _build_find_args find_args "$directory" "$recursive" "$dirs_only"
 
     local perl_script='
 my @minor = qw(a an the and but or nor for so yet at by in of on to up as);
@@ -415,8 +396,7 @@ s/(?<=\d) ([a-z]\w*)/" ".(grep{$_ eq $1}@minor ? $1 : ucfirst($1))/ge;
 s/^(\w)/uc($1)/e'
 
     while IFS= read -r -d '' item; do
-        local parent name stem ext new_name new_stem
-        parent="$(dirname "$item")"
+        local name stem ext new_name new_stem
         name="$(basename "$item")"
         stem="${name%.*}"
         ext="${name##*.}"
@@ -436,18 +416,7 @@ s/^(\w)/uc($1)/e'
             new_name="$new_stem.$ext"
         fi
 
-        if [[ -n "$new_name" && "$new_name" != "$name" ]]; then
-            if [[ -e "$parent/$new_name" ]]; then
-                warn "Rename skipped (target exists): $name -> $new_name"
-                rename_errors=$((rename_errors + 1))
-                continue
-            fi
-            echo "  Renaming: $name -> $new_name"
-            if ! mv "$item" "$parent/$new_name"; then
-                warn "Could not rename: $item"
-                rename_errors=$((rename_errors + 1))
-            fi
-        fi
+        do_rename "$item" "$new_name"
     done < <(find "${find_args[@]}" -print0 2>/dev/null)
 }
 
