@@ -7,7 +7,7 @@
 
 ### Changed
 - **Copy step** — when both downloads and staging folders contain files, Jackify now prompts whether to copy new files into staging rather than silently skipping the copy
-- **Presets** — sample presets renamed to `720p Sample` and `1080p Sample`
+- **Presets** — sample presets renamed to `My 720p Flicks` and `My 1080p Flicks`
 
 ## v1.0.1 — 2026-03-08
 
@@ -27,7 +27,7 @@
 - **`perl` noted as a requirement** in README
 
 ### Changed
-- **Step 2 header** now shows the video count and selected preset: `STEP 2: Converting 7 videos - Preset: 1080p Sample`
+- **Step 2 header** now shows the video count and selected preset: `STEP 2: Converting 7 videos - Preset: My 1080p Flicks`
 - **Per-conversion display** simplified: verbose HandBrake output removed; each job now shows only the filename above the progress bar
 - **Logging overhauled** — opt-in full logging (`-l`/`--log` flag, `jackify_log.txt`) removed and replaced with automatic error-only logging to `error_log.txt`
 - **After Steps 2 and 3** — countdown replaced with "Press any key to continue" prompt
