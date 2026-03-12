@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.0 — 2026-03-12
+
+### Added
+- **`do_rename` helper** — shared rename-with-collision-check logic extracted from the three cleanup functions
+- **`_parse_find_opts` helper** — shared `--recursive` / `--dirs` argument parsing extracted from the three cleanup functions
+- **`_build_find_args` helper** — shared `find` argument builder extracted from the three cleanup functions
+- **Subtitle copy error handling** — failed subtitle copies now log a warning instead of silently failing
+
+### Changed
+- **`rename_in_path`**, **`strip_source_tags`**, **`apply_title_case`** — refactored to use shared helpers, eliminating duplicated logic across all three functions
+
+---
+
 ## v1.0.4 — 2026-03-12
 
 ### Added
