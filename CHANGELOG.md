@@ -2,8 +2,12 @@
 
 ## v1.0.4 — 2026-03-12
 
+### Added
+- **Quit prompt** — "Press any key to quit" prompt added at the end of the script
+
 ### Changed
 - **Copy step** — when both downloads and staging folders contain files, Jackify now prompts whether to copy new files into staging rather than silently skipping the copy
+- **Presets** — sample presets renamed to `720p Sample` and `1080p Sample`
 
 ## v1.0.1 — 2026-03-08
 
