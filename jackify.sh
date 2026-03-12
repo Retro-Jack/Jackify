@@ -670,3 +670,6 @@ if [[ "${answer,,}" == "y" ]]; then
 fi
 echo
 print_header "Done"
+echo
+read -r -s -n1 -p "Press any key to quit . . . "
+echo
