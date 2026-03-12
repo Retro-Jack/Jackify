@@ -31,7 +31,7 @@ PROCESS_DELAY=2
 
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
 SUBTITLE_EXTENSIONS=(srt ass ssa vtt sub idx sup)
-EXCLUDED_BASENAMES=(sample preview trailer featurette)
+EXCLUDED_BASENAMES=(sample preview featurette)
 
 ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 

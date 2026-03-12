@@ -8,6 +8,7 @@
 ### Changed
 - **Copy step** — when both downloads and staging folders contain files, Jackify now prompts whether to copy new files into staging rather than silently skipping the copy
 - **Presets** — sample presets renamed to `My 720p Flicks` and `My 1080p Flicks`
+- **Excluded basenames** — `trailer` removed from the default exclusion list
 
 ## v1.0.1 — 2026-03-08
 
