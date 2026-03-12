@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.2 — 2026-03-12
+
+### Changed
+- **Copy step** — when both downloads and staging folders contain files, Jackify now prompts whether to copy new files into staging rather than silently skipping the copy
+
 ## v1.0.1 — 2026-03-08
 
 ### Fixed

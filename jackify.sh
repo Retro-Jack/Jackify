@@ -570,12 +570,31 @@ if [[ ${#downloads_list[@]} -gt 0 && ${#staging_list[@]} -eq 0 ]]; then
     countdown_and_clear
 else
     if [[ ${#staging_list[@]} -gt 0 && ${#downloads_list[@]} -gt 0 ]]; then
-        echo "Staging folder has files — skipping copy from downloads."
+        echo "Both downloads and staging folders have files."
+        echo
+        read -r -p "Copy new files from downloads into staging? [y/N] " answer
+        if [[ "${answer,,}" == "y" ]]; then
+            print_header "STEP 1: Copying from Downloads"
+
+            for file in "${downloads_list[@]}"; do
+                copy_file_to_input "$file"
+            done
+
+            while IFS= read -r -d '' sub; do
+                copy_file_to_input "$sub"
+            done < <(find -L "$DOWNLOADS_DIR" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0)
+
+            countdown_and_clear
+        else
+            echo "Skipping copy — using existing staging folder contents."
+            echo
+            countdown_and_clear
+        fi
     else
         echo "Downloads folder is empty — skipping copy, using staging folder."
+        echo
+        countdown_and_clear
     fi
-    echo
-    countdown_and_clear
 fi
 
 # ----- Step 2: Convert -------------------------------------------------------
