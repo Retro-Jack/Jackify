@@ -27,7 +27,7 @@
 - **`perl` noted as a requirement** in README
 
 ### Changed
-- **Step 2 header** now shows the video count and selected preset: `STEP 2: Converting 7 videos - Preset: Jack 1080`
+- **Step 2 header** now shows the video count and selected preset: `STEP 2: Converting 7 videos - Preset: 1080p Sample`
 - **Per-conversion display** simplified: verbose HandBrake output removed; each job now shows only the filename above the progress bar
 - **Logging overhauled** — opt-in full logging (`-l`/`--log` flag, `jackify_log.txt`) removed and replaced with automatic error-only logging to `error_log.txt`
 - **After Steps 2 and 3** — countdown replaced with "Press any key to continue" prompt
