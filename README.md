@@ -1,6 +1,7 @@
 # Jackify
 
 [![Latest Release](https://img.shields.io/github/v/release/Retro-Jack/Jackify)](https://github.com/Retro-Jack/Jackify/releases/latest)
+[![Wiki](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/Retro-Jack/Jackify/wiki)
 
 A bash script that automates video conversion using HandBrakeCLI. It copies videos and subtitles from a downloads folder to a staging folder (preserving directory structure), converts them using a named HandBrake preset, then cleans up file and folder names in the output.
 
@@ -46,3 +47,7 @@ If any warnings or errors occur during a run, they are logged to `error_log.txt`
 Preset JSON files live in the `Handbrake Presets/` folder. Each file contains a single HandBrake preset exported from the HandBrake GUI. The preset name is read from the `PresetName` field inside the JSON.
 
 To add a new preset: export it from HandBrake GUI and drop the JSON into `Handbrake Presets/`. It will appear in the menu automatically on the next run.
+
+## Documentation
+
+Full documentation is available on the [Jackify wiki](https://github.com/Retro-Jack/Jackify/wiki), including detailed guides on configuration, presets, name cleanup, and a flowchart of the script.
