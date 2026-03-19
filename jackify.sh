@@ -8,6 +8,7 @@
 # Steps:
 #   1. Copy from DOWNLOADS_DIR to STAGING_DIR (skipped if downloads is empty)
 #   2. Convert all videos in STAGING_DIR using the selected HandBrake preset
+#      If a matching .srt exists, also produce a burned-subtitles copy
 #   3. Strip source tags, clean separators, and apply title case to OUTPUT_DIR
 #
 # Requires: HandBrakeCLI  (other dependencies are standard on any Linux system)
@@ -41,6 +42,7 @@ files_failed=0
 videos_converted=0
 videos_skipped=0
 videos_failed=0
+videos_burned=0
 rename_errors=0
 
 # Set by process_video while HandBrake is running; the EXIT trap removes the
@@ -220,7 +222,10 @@ process_video() {
     # Converts a single video file using HandBrakeCLI. Skips files that have
     # already been converted. If the input is the only media file in its
     # directory, output goes to the root of OUTPUT_DIR; otherwise the relative
-    # path from STAGING_DIR is preserved.
+    # path from STAGING_DIR is preserved. After a successful conversion, any
+    # matching subtitle files are copied to the output directory. If a matching
+    # .srt file exists, a second pass burns the subtitles into a separate copy
+    # named "Stem [Burned Subs].mp4".
     local input_file="$1"
     local current_num="$2"
     local total_num="$3"
@@ -280,9 +285,8 @@ process_video() {
         echo "[SUCCESS] Conversion complete"
         videos_converted=$((videos_converted + 1))
 
-        local stem input_dir
+        local stem
         stem="$(basename "${input_file%.*}")"
-        input_dir="$(dirname "$input_file")"
         while IFS= read -r -d '' sub; do
             local sub_name
             sub_name="$(basename "$sub")"
@@ -293,6 +297,36 @@ process_video() {
                 fi
             fi
         done < <(find -L "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
+
+        local srt_path="$input_dir/$stem.srt"
+        if [[ -f "$srt_path" ]]; then
+            local burned_file="$output_dir/$stem [Burned Subs].${OUTPUT_FORMAT}"
+            if [[ -f "$burned_file" ]]; then
+                echo "  [BURNED SUBS] Already exists, skipping"
+            else
+                echo
+                echo "  Burning subtitles: $(basename "$srt_path")"
+                printf '  [%s]   0%%' "$(perl -e "print '░' x 40")"
+                _current_output="$burned_file"
+                "$HANDBRAKE_CLI" \
+                    -i "$input_file" \
+                    -o "$burned_file" \
+                    --preset-import-file "$PRESET_FILE" \
+                    --preset "$PRESET_NAME" \
+                    --srt-file "$srt_path" \
+                    --srt-burn 1 2>&1 | tr '\r' '\n' | show_progress
+                local burn_ok=${PIPESTATUS[0]}
+                if [[ $burn_ok -eq 0 ]]; then
+                    _current_output=""
+                    echo "  [SUCCESS] Burned subs complete"
+                    videos_burned=$((videos_burned + 1))
+                else
+                    _current_output=""
+                    rm -f "$burned_file"
+                    warn "Subtitle burn failed on: $(basename "$input_file")"
+                fi
+            fi
+        fi
     else
         _current_output=""
         rm -f "$output_file"
@@ -331,9 +365,9 @@ rename_in_path() {
 
 strip_source_tags() {
     # Strips common source release tags from filenames and directory names.
-    # All square-bracketed content is removed unconditionally. Known technical
-    # tags in parentheses are removed; years e.g. "(2007)" are preserved.
-    # Orphaned separators left behind are cleaned up afterwards.
+    # Square-bracketed content is removed except for "[Burned Subs]". Known
+    # technical tags in parentheses are removed; years e.g. "(2007)" are
+    # preserved. Orphaned separators left behind are cleaned up afterwards.
     # Usage: strip_source_tags <directory> [--recursive] [--dirs]
     local directory="$1"
     local recursive=false dirs_only=false
@@ -351,7 +385,7 @@ my $t = qr/2160p|1080p|720p|480p|4K|UHD|
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
     YIFY|YTS/xi;
-s/\s*\[[^\]]*\]//g;
+s/\s*\[(?!Burned Subs\])[^\]]*\]//g;
 s/\s*\(\s*$t\s*\)\s*//gi;
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
 s/[.\-_]{2,}([^.])/$1 ? ".$1" : ""/ge;
@@ -622,6 +656,7 @@ echo
 printf 'Preset:           %s\n' "$PRESET_NAME"
 printf 'Videos found:     %d\n' "$total_videos"
 printf 'Videos converted: %d\n' "$videos_converted"
+[[ $videos_burned    -gt 0 ]] && printf 'Burned subs made: %d\n' "$videos_burned"
 printf 'Videos skipped:   %d\n' "$videos_skipped"
 [[ $videos_failed  -gt 0 ]] && printf 'Videos failed:    %d\n' "$videos_failed"
 [[ $files_failed   -gt 0 ]] && printf 'Copy failures:    %d\n' "$files_failed"
