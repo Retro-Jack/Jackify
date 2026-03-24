@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.1 — 2026-03-24
+
+### Fixed
+- **TV episode regex** — moved inline pattern to a variable to avoid bash 5.3 interpreting the leading `.` in `[._ ]` as a POSIX collating element, which caused a syntax error
+
+---
+
 ## v1.1.0 — 2026-03-12
 
 ### Added

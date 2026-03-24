@@ -244,7 +244,8 @@ process_video() {
     if [[ $sibling_count -eq 1 ]]; then
         local stem
         stem="$(basename "${input_file%.*}")"
-        if [[ "$stem" =~ ^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+ ]]; then
+        local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
+        if [[ "$stem" =~ $tv_pattern ]]; then
             local show_raw="${BASH_REMATCH[1]}"
             local season_num
             season_num=$(( 10#${BASH_REMATCH[2]} ))
