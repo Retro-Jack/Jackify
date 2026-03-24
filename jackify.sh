@@ -384,7 +384,7 @@ my $t = qr/2160p|1080p|720p|480p|4K|UHD|
     TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC|MP3|7\.1|5\.1|
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
-    YIFY|YTS/xi;
+    YIFY|YTS|BONE/xi;
 s/\s*\[(?!Burned Subs\])[^\]]*\]//g;
 s/\s*\(\s*$t\s*\)\s*//gi;
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
