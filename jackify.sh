@@ -221,8 +221,10 @@ show_progress() {
 process_video() {
     # Converts a single video file using HandBrakeCLI. Skips files that have
     # already been converted. If the input is the only media file in its
-    # directory, output goes to the root of OUTPUT_DIR; otherwise the relative
-    # path from STAGING_DIR is preserved. After a successful conversion, any
+    # directory and its name contains a TV episode pattern (SxxExx), output goes
+    # to OUTPUT_DIR/<Show Name> - Season <N>/ so all episodes of a season land
+    # in the same folder. Otherwise output goes to the root of OUTPUT_DIR, or
+    # the relative path from STAGING_DIR is preserved when siblings exist. After a successful conversion, any
     # matching subtitle files are copied to the output directory. If a matching
     # .srt file exists, a second pass burns the subtitles into a separate copy
     # named "Stem [Burned Subs].mp4".
@@ -237,14 +239,26 @@ process_video() {
 
     local output_file output_dir
     if [[ $sibling_count -eq 1 ]]; then
-        local sub_count
-        sub_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
-        if [[ $sub_count -gt 0 && "$input_dir" != "$STAGING_DIR" ]]; then
-            output_dir="$OUTPUT_DIR/$(basename "$input_dir")"
+        local stem
+        stem="$(basename "${input_file%.*}")"
+        if [[ "$stem" =~ ^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+ ]]; then
+            local show_raw="${BASH_REMATCH[1]}"
+            local season_num
+            season_num=$(( 10#${BASH_REMATCH[2]} ))
+            local show_name
+            show_name="$(printf '%s' "$show_raw" | perl -pe 's/[._]/ /g; s/\s{2,}/ /g; s/^\s+|\s+$//g')"
+            output_dir="$OUTPUT_DIR/$show_name - Season $season_num"
             output_file="$output_dir/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
         else
-            output_file="$OUTPUT_DIR/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
-            output_dir="$OUTPUT_DIR"
+            local sub_count
+            sub_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
+            if [[ $sub_count -gt 0 && "$input_dir" != "$STAGING_DIR" ]]; then
+                output_dir="$OUTPUT_DIR/$(basename "$input_dir")"
+                output_file="$output_dir/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
+            else
+                output_file="$OUTPUT_DIR/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
+                output_dir="$OUTPUT_DIR"
+            fi
         fi
     else
         local relative_path="${input_file#"$STAGING_DIR"/}"
@@ -291,6 +305,7 @@ process_video() {
             local sub_name
             sub_name="$(basename "$sub")"
             if [[ "${sub_name%.*}" == "$stem" ]]; then
+                echo
                 echo "  Copying subtitle: $sub_name"
                 if ! cp "$sub" "$output_dir/"; then
                     warn "Subtitle copy failed: $sub_name"
@@ -304,7 +319,6 @@ process_video() {
             if [[ -f "$burned_file" ]]; then
                 echo "  [BURNED SUBS] Already exists, skipping"
             else
-                echo
                 echo "  Burning subtitles: $(basename "$srt_path")"
                 printf '  [%s]   0%%' "$(perl -e "print '░' x 40")"
                 _current_output="$burned_file"
