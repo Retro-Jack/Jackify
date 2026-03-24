@@ -203,6 +203,8 @@ copy_file_to_input() {
 }
 
 show_progress() {
+    # Optional first argument: indent string (default: "  ")
+    local indent="${1:-  }"
     local bar_width=40
     local pct filled empty
     while IFS= read -r line; do
@@ -210,12 +212,13 @@ show_progress() {
             pct=${BASH_REMATCH[1]}
             filled=$(( pct * bar_width / 100 ))
             empty=$(( bar_width - filled ))
-            printf '\r  [%s] %3d%%' \
+            printf '\r%s[%s] %3d%%' \
+                "$indent" \
                 "$(perl -e "print '█' x $filled . '░' x $empty")" \
                 "$pct"
         fi
     done
-    printf '\r  [%s] 100%%\n' "$(perl -e "print '█' x $bar_width")"
+    printf '\r%s[%s] 100%%\n' "$indent" "$(perl -e "print '█' x $bar_width")"
 }
 
 process_video() {
@@ -291,7 +294,7 @@ process_video() {
         -i "$input_file" \
         -o "$output_file" \
         --preset-import-file "$PRESET_FILE" \
-        --preset "$PRESET_NAME" 2>&1 | tr '\r' '\n' | show_progress
+        --preset "$PRESET_NAME" 2>&1 | tr '\r' '\n' | show_progress "  "
     hb_ok=${PIPESTATUS[0]}
 
     if [[ $hb_ok -eq 0 ]]; then
@@ -306,7 +309,7 @@ process_video() {
             sub_name="$(basename "$sub")"
             if [[ "${sub_name%.*}" == "$stem" ]]; then
                 echo
-                echo "  Copying subtitle: $sub_name"
+                echo "    Copying subtitle: $sub_name"
                 if ! cp "$sub" "$output_dir/"; then
                     warn "Subtitle copy failed: $sub_name"
                 fi
@@ -319,8 +322,8 @@ process_video() {
             if [[ -f "$burned_file" ]]; then
                 echo "  [BURNED SUBS] Already exists, skipping"
             else
-                echo "  Burning subtitles: $(basename "$srt_path")"
-                printf '  [%s]   0%%' "$(perl -e "print '░' x 40")"
+                echo "    Burning subtitles: $(basename "$srt_path")"
+                printf '    [%s]   0%%' "$(perl -e "print '░' x 40")"
                 _current_output="$burned_file"
                 "$HANDBRAKE_CLI" \
                     -i "$input_file" \
@@ -328,11 +331,11 @@ process_video() {
                     --preset-import-file "$PRESET_FILE" \
                     --preset "$PRESET_NAME" \
                     --srt-file "$srt_path" \
-                    --srt-burn 1 2>&1 | tr '\r' '\n' | show_progress
+                    --srt-burn 1 2>&1 | tr '\r' '\n' | show_progress "    "
                 local burn_ok=${PIPESTATUS[0]}
                 if [[ $burn_ok -eq 0 ]]; then
                     _current_output=""
-                    echo "  [SUCCESS] Burned subs complete"
+                    echo "    [SUCCESS] Burned subs complete"
                     videos_burned=$((videos_burned + 1))
                 else
                     _current_output=""
