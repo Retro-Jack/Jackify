@@ -193,12 +193,20 @@ copy_file_to_input() {
         return
     fi
 
-    if [[ ! -f "$target_file" ]]; then
-        echo "  Copying: $(basename "$source_file") -> $(basename "$target_file")"
-        if ! cp "$source_file" "$target_file"; then
-            warn "Copy failed: $source_file"
-            files_failed=$((files_failed + 1))
-        fi
+    if [[ -f "$target_file" ]]; then
+        local stem ext n
+        stem="$(basename "${target_file%.*}")"
+        ext="${target_file##*.}"
+        n=1
+        while [[ -f "$target_dir/${stem}(${n}).${ext}" ]]; do
+            n=$((n + 1))
+        done
+        target_file="$target_dir/${stem}(${n}).${ext}"
+    fi
+    echo "  Copying: $(basename "$source_file") -> $(basename "$target_file")"
+    if ! cp "$source_file" "$target_file"; then
+        warn "Copy failed: $source_file"
+        files_failed=$((files_failed + 1))
     fi
 }
 
@@ -402,7 +410,12 @@ my $t = qr/2160p|1080p|720p|480p|4K|UHD|
     TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC|MP3|7\.1|5\.1|
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
-    YIFY|YTS|BONE/xi;
+    YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
+    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|
+    HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|
+    TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|
+    NTG|FLUX|ION10|CAKES|PECULATE|
+    aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
 s/\s*\[(?!Burned Subs\])[^\]]*\]//g;
 s/\s*\(\s*$t\s*\)\s*//gi;
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;

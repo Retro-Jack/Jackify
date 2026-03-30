@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.2 — 2026-03-30
+
+### Fixed
+- **Copy collision handling** — when a file being copied to staging already exists at the target path, it is now renamed with a `(1)`, `(2)`, … suffix instead of being silently skipped
+
+---
+
 ## v1.3.1 — 2026-03-24
 
 ### Fixed
