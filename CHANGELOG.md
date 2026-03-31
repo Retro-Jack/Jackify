@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.3 — 2026-03-31
+
+### Fixed
+- **Subtitle encoding** — burned-subs HandBrake pass now passes `--srt-codeset UTF-8` so non-ASCII characters in SRT files render correctly instead of being mangled
+
+---
+
 ## v1.3.2 — 2026-03-30
 
 ### Fixed

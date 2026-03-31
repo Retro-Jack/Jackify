@@ -340,6 +340,7 @@ process_video() {
                     --preset-import-file "$PRESET_FILE" \
                     --preset "$PRESET_NAME" \
                     --srt-file "$srt_path" \
+                    --srt-codeset UTF-8 \
                     --srt-burn 1 2>&1 | tr '\r' '\n' | show_progress "    "
                 local burn_ok=${PIPESTATUS[0]}
                 if [[ $burn_ok -eq 0 ]]; then
