@@ -36,6 +36,9 @@ EXCLUDED_BASENAMES=(sample preview featurette)
 
 ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 
+SRT_SIZE_THRESHOLD=20  # % difference considered substantial when comparing SRT sizes
+SRT_MIN_CUES=20        # extracted SRT must have at least this many cues to be used
+
 # ----- Counters --------------------------------------------------------------
 
 files_failed=0
@@ -101,6 +104,10 @@ check_path() {
 
 check_file() {
     [[ -f "$1" ]] || die "Cannot find file: $1 ($2)"
+}
+
+check_command() {
+    command -v "$1" &>/dev/null || die "Cannot find command: $1 ($2)"
 }
 
 build_ext_args() {
@@ -313,6 +320,7 @@ process_video() {
 
         local stem
         stem="$(basename "${input_file%.*}")"
+        extract_subtitle "$input_file" "$input_dir/$stem.srt"
         while IFS= read -r -d '' sub; do
             local sub_name
             sub_name="$(basename "$sub")"
@@ -515,6 +523,79 @@ remove_title_number() {
     fi
 }
 
+extract_subtitle() {
+    # Extracts an English, non-hearing-impaired, text-based subtitle track from
+    # a video file and writes it to a target .srt path. If the target already
+    # exists, the larger file wins when the size difference exceeds
+    # SRT_SIZE_THRESHOLD percent; otherwise the extracted version takes
+    # precedence. Extracted SRTs with fewer than SRT_MIN_CUES cues are
+    # discarded to avoid writing scene-brand or watermark tracks.
+    local input_file="$1"
+    local target_srt="$2"
+
+    # Text-based subtitle codecs convertible to SRT
+    local text_codecs="subrip|ass|ssa|webvtt|mov_text|microdvd"
+
+    # Find the first English, non-hearing-impaired, text-based subtitle stream
+    local track_index=""
+    while IFS=',' read -r idx codec lang hi; do
+        lang="${lang,,}"
+        if [[ "$lang" == "eng" && "$hi" != "1" && "$codec" =~ ^($text_codecs)$ ]]; then
+            track_index="$idx"
+            break
+        fi
+    done < <(ffprobe -v quiet -select_streams s \
+        -show_entries stream=index,codec_name:stream_tags=language:stream_disposition=hearing_impaired \
+        -of csv=p=0 "$input_file" 2>/dev/null)
+
+    [[ -z "$track_index" ]] && return 0
+
+    # Extract to a temp file
+    local temp_srt
+    temp_srt="$(mktemp --suffix=.srt)"
+    if ! ffmpeg -v quiet -i "$input_file" -map "0:$track_index" -c:s srt "$temp_srt" 2>/dev/null; then
+        rm -f "$temp_srt"
+        warn "Subtitle extraction failed for: $(basename "$input_file")"
+        return 0
+    fi
+
+    # Reject trivially short extractions (scene brands, watermarks, etc.)
+    local cue_count
+    cue_count=$(grep -c '^[0-9][0-9]*$' "$temp_srt" 2>/dev/null || echo 0)
+    if [[ $cue_count -lt $SRT_MIN_CUES ]]; then
+        rm -f "$temp_srt"
+        echo "  Subtitle: extracted track has only $cue_count cue(s) — ignoring"
+        return 0
+    fi
+
+    if [[ -f "$target_srt" ]]; then
+        local existing_size extracted_size
+        existing_size=$(stat -c%s "$target_srt")
+        extracted_size=$(stat -c%s "$temp_srt")
+
+        local diff larger pct
+        diff=$(( extracted_size > existing_size ? extracted_size - existing_size : existing_size - extracted_size ))
+        larger=$(( extracted_size > existing_size ? extracted_size : existing_size ))
+        pct=$(( diff * 100 / larger ))
+
+        if [[ $pct -gt $SRT_SIZE_THRESHOLD ]]; then
+            if [[ $extracted_size -gt $existing_size ]]; then
+                mv "$temp_srt" "$target_srt"
+                echo "  Subtitle: using extracted (${pct}% larger than existing)"
+            else
+                rm -f "$temp_srt"
+                echo "  Subtitle: keeping existing (${pct}% larger than extracted)"
+            fi
+        else
+            mv "$temp_srt" "$target_srt"
+            echo "  Subtitle: using extracted (sizes similar, ${pct}% difference)"
+        fi
+    else
+        mv "$temp_srt" "$target_srt"
+        echo "  Subtitle: extracted from embedded track ($cue_count cues)"
+    fi
+}
+
 select_preset() {
     # Scans PRESET_DIR for JSON files, extracts each preset's name, and presents
     # a numbered menu. Sets PRESET_FILE and PRESET_NAME from the user's choice.
@@ -562,6 +643,8 @@ echo
 check_path "$DOWNLOADS_DIR" "Downloads directory"
 check_file "$HANDBRAKE_CLI"  "HandBrake CLI"
 check_path "$PRESET_DIR"     "Preset directory"
+check_command ffmpeg          "FFmpeg"
+check_command ffprobe         "FFprobe"
 
 echo "[OK] Prerequisites met"
 echo

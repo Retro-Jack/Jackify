@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.4.0 — 2026-04-03
+
+### Added
+- **Subtitle extraction** — after each successful conversion, Jackify inspects the input file for an English, non-hearing-impaired, text-based subtitle track using `ffprobe`; if found, it is extracted to a matching `.srt` file via `ffmpeg` so the existing burned-subtitles pass can pick it up automatically
+- **Extraction safety checks** — extracted tracks with fewer than `SRT_MIN_CUES` cues (default: 20) are silently discarded to prevent scene-brand or watermark tracks overwriting a proper subtitle
+- **SRT size comparison** — if a matching `.srt` already exists, the extracted version takes precedence unless the size difference exceeds `SRT_SIZE_THRESHOLD` percent (default: 20%), in which case the larger file is used
+- **`SRT_SIZE_THRESHOLD` / `SRT_MIN_CUES`** config variables added at the top of the script
+- **`ffmpeg` and `ffprobe` prerequisite checks** added to startup
+- **`check_command` helper** for validating commands available in `PATH`
+
+---
+
 ## v1.3.3 — 2026-03-31
 
 ### Fixed
