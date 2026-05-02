@@ -1,0 +1,4 @@
+jackify.sh linguist-language=Shell
+*.sh linguist-language=Shell
+*.json linguist-detectable=false
+*.md linguist-detectable=false

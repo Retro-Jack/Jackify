@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.4.1 — 2026-05-02
+
+### Changed
+- **Error logging** — `error_log.txt` is now created lazily on the first error (clean runs leave no file). When triggered, it gets a session header (timestamp, host, user, PID, preset, paths, HandBrake version) and each entry includes the calling function/line plus a details payload — HandBrake stderr tail, perl stderr, `cp`/`mv` errors, exit codes, free-space on copy failures. HandBrake progress noise (`Encoding: task N of M, …` and percent lines) is filtered out of the tail.
+- **Terminal output** — `warn`/`die` print only `[WARN] See <log>` / `[ERROR] See <log>` so the run isn't disrupted by error spam.
+- **Pause behaviour** — replaced the 10-second countdown between steps with a "Press any key to continue" prompt. The skip-copy branches clear immediately instead.
+- **Burned-subs filename** — converted-with-subtitles output is named `<stem> - burned subs.mp4` (lowercase, no brackets).
+- **Internal refactor** — extracted `_perl_rename_loop` (used by `rename_in_path`, `strip_source_tags`, `apply_title_case`), `_handbrake_log_tail`, and `do_copy_from_downloads`; simplified `build_ext_args`.
+
+### Fixed
+- **Apostrophe casing** — title case no longer capitalises the letter after an apostrophe (e.g. "Don'T" → "Don't"); straight `'` and curly `’` are both treated as part of the word.
+- **Year formatting** — bare four-digit years (1900–2099) are wrapped in parentheses (e.g. `Movie 2007` → `Movie (2007)`).
+- **Burned-subs casing** — preserve regex now matches with or without the leading dash, so the suffix survives the separator-cleanup pass and stays lowercase.
+
+---
+
 ## v1.4.0 — 2026-04-03
 
 ### Added
