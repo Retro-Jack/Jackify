@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.15 — 2026-05-03
+
+### Changed
+- **Final report spacing** — failure counters (`Videos failed`, `Copy failures`, `Rename errors`) now sit beneath a blank line so they're visually separated from the cleanup/skipped block. The blank line and the failure block only render when at least one failure counter is non-zero, so clean runs keep their tight layout.
+
+---
+
 ## v1.4.14 — 2026-05-03
 
 ### Changed

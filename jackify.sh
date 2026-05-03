@@ -897,9 +897,12 @@ printf 'Extracted subs burned: %d\n' "$extracted_subs_burned"
 echo  "------------------------"
 echo  "Name cleanup:          Completed"
 printf 'Videos skipped:        %d\n' "$videos_skipped"
-[[ $videos_failed         -gt 0 ]] && printf 'Videos failed:         %d\n' "$videos_failed"
-[[ $files_failed          -gt 0 ]] && printf 'Copy failures:         %d\n' "$files_failed"
-[[ $rename_errors         -gt 0 ]] && printf 'Rename errors:         %d\n' "$rename_errors"
+if (( videos_failed + files_failed + rename_errors > 0 )); then
+    echo
+    [[ $videos_failed -gt 0 ]] && printf 'Videos failed:         %d\n' "$videos_failed"
+    [[ $files_failed  -gt 0 ]] && printf 'Copy failures:         %d\n' "$files_failed"
+    [[ $rename_errors -gt 0 ]] && printf 'Rename errors:         %d\n' "$rename_errors"
+fi
 echo
 [[ -f "$ERROR_LOG" ]] && echo "Errors logged to:      $ERROR_LOG"
 echo
