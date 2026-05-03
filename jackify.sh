@@ -591,8 +591,9 @@ _find_eng_subtitle_track() {
     # Echoes the index of an English (or untagged) non-hearing-impaired
     # text-based subtitle stream in <input_file>, or nothing if none exists.
     # Preference order: eng > und/empty. Foreign-language tags are skipped.
-    # MP4 muxers commonly leave the language as `und`, so the fallback is
-    # required for that container family.
+    # The und/empty fallback applies to every container — MP4 muxers commonly
+    # leave the language as `und`, but MKVs / WebM / TS files can be tagged
+    # the same way when the original muxer didn't set a language.
     # ffprobe emits stream_disposition fields before stream_tags fields
     # regardless of -show_entries order, so the columns are: idx,codec,hi,lang.
     local input_file="$1"
