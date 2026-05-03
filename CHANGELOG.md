@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.6 — 2026-05-03
+
+### Changed
+- **Progress bar** — pre-built `FULL_BAR` / `EMPTY_BAR` constants once at startup and slice with `${var:0:N}` instead of forking `perl` on every progress tick (dozens of forks per video saved).
+- **Embedded-subs probe cached** — `process_video` now passes the ffprobe-found track index to `extract_subtitle` so a solo video with embedded subs no longer probes twice (once for output-dir routing, once for extraction).
+- **`process_video` cleanup** — `stem` hoisted to a single declaration at the top of the function; `output_file = "$output_dir/$stem.$OUTPUT_FORMAT"` factored out of the four solo-video branches; redundant `has_embedded_subs` flag removed (folded into `[[ -n "$embedded_track" ]]`).
+
+---
+
 ## v1.4.5 — 2026-05-03
 
 ### Added

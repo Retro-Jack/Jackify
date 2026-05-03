@@ -42,6 +42,12 @@ ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 SRT_SIZE_THRESHOLD=20  # % difference considered substantial when comparing SRT sizes
 SRT_MIN_CUES=20        # extracted SRT must have at least this many cues to be used
 
+PROGRESS_BAR_WIDTH=40
+# Pre-built bars; sliced with ${var:0:N} during progress updates so each tick
+# is a string slice instead of a perl fork (~dozens of forks per video saved).
+FULL_BAR="$(perl -e "print '█' x $PROGRESS_BAR_WIDTH")"
+EMPTY_BAR="$(perl -e "print '░' x $PROGRESS_BAR_WIDTH")"
+
 # ----- Counters --------------------------------------------------------------
 
 files_failed=0
@@ -299,20 +305,19 @@ _handbrake_log_tail() {
 show_progress() {
     # Optional first argument: indent string (default: "  ")
     local indent="${1:-  }"
-    local bar_width=40
-    local pct filled empty
+    local pct filled
     while IFS= read -r line; do
         if [[ "$line" =~ ([0-9]+)\.[0-9]+[[:space:]]*% ]]; then
             pct=${BASH_REMATCH[1]}
-            filled=$(( pct * bar_width / 100 ))
-            empty=$(( bar_width - filled ))
-            printf '\r%s[%s] %3d%%' \
+            filled=$(( pct * PROGRESS_BAR_WIDTH / 100 ))
+            printf '\r%s[%s%s] %3d%%' \
                 "$indent" \
-                "$(perl -e "print '█' x $filled . '░' x $empty")" \
+                "${FULL_BAR:0:filled}" \
+                "${EMPTY_BAR:0:$((PROGRESS_BAR_WIDTH - filled))}" \
                 "$pct"
         fi
     done
-    printf '\r%s[%s] 100%%\n' "$indent" "$(perl -e "print '█' x $bar_width")"
+    printf '\r%s[%s] 100%%\n' "$indent" "$FULL_BAR"
 }
 
 process_video() {
@@ -333,42 +338,37 @@ process_video() {
     local current_num="$2"
     local total_num="$3"
 
-    local input_dir
+    local input_dir stem
     input_dir="$(dirname "$input_file")"
+    stem="$(basename "${input_file%.*}")"
     local sibling_count
     sibling_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) | wc -l)
 
+    # Cached and reused later by extract_subtitle to avoid a second ffprobe call.
+    local embedded_track=""
+
     local output_file output_dir
     if [[ $sibling_count -eq 1 ]]; then
-        local stem
-        stem="$(basename "${input_file%.*}")"
         local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
         if [[ "$stem" =~ $tv_pattern ]]; then
             local show_raw="${BASH_REMATCH[1]}"
-            local season_num
-            season_num=$(( 10#${BASH_REMATCH[2]} ))
+            local season_num=$(( 10#${BASH_REMATCH[2]} ))
             local show_name
             show_name="$(printf '%s' "$show_raw" | perl -pe 's/[._]/ /g; s/\s{2,}/ /g; s/^\s+|\s+$//g')"
             output_dir="$OUTPUT_DIR/$show_name - Season $season_num"
-            output_file="$output_dir/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
         else
             local sub_count
             sub_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
-            local has_embedded_subs=0
-            if [[ $sub_count -eq 0 ]] && _find_eng_subtitle_track "$input_file" >/dev/null; then
-                has_embedded_subs=1
-            fi
-            if [[ ($sub_count -gt 0 || $has_embedded_subs -eq 1) && "$input_dir" != "$STAGING_DIR" ]]; then
+            [[ $sub_count -eq 0 ]] && embedded_track=$(_find_eng_subtitle_track "$input_file")
+            if [[ ($sub_count -gt 0 || -n "$embedded_track") && "$input_dir" != "$STAGING_DIR" ]]; then
                 output_dir="$OUTPUT_DIR/$(basename "$input_dir")"
-                output_file="$output_dir/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
-            elif [[ $has_embedded_subs -eq 1 ]]; then
+            elif [[ -n "$embedded_track" ]]; then
                 output_dir="$OUTPUT_DIR/$stem"
-                output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
             else
-                output_file="$OUTPUT_DIR/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
                 output_dir="$OUTPUT_DIR"
             fi
         fi
+        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
     else
         local relative_path="${input_file#"$STAGING_DIR"/}"
         output_file="$OUTPUT_DIR/${relative_path%.*}.${OUTPUT_FORMAT}"
@@ -396,7 +396,7 @@ process_video() {
     # required to select a named preset from a JSON file.
     local hb_ok hb_log
     hb_log=$(mktemp)
-    printf '  [%s]   0%%' "$(perl -e "print '░' x 40")"
+    printf '  [%s]   0%%' "$EMPTY_BAR"
     _current_output="$output_file"
     { "$HANDBRAKE_CLI" \
         -i "$input_file" \
@@ -410,9 +410,7 @@ process_video() {
         echo "[SUCCESS] Conversion complete"
         ((videos_converted++))
 
-        local stem
-        stem="$(basename "${input_file%.*}")"
-        extract_subtitle "$input_file" "$input_dir/$stem.srt"
+        extract_subtitle "$input_file" "$input_dir/$stem.srt" "$embedded_track"
         while IFS= read -r -d '' sub; do
             local sub_name
             sub_name="$(basename "$sub")"
@@ -435,7 +433,7 @@ $sub_cp_err"
                 echo "  [BURNED SUBS] Already exists, skipping"
             else
                 echo "    Burning subtitles: $(basename "$srt_path")"
-                printf '    [%s]   0%%' "$(perl -e "print '░' x 40")"
+                printf '    [%s]   0%%' "$EMPTY_BAR"
                 _current_output="$burned_file"
                 local burn_log
                 burn_log=$(mktemp)
@@ -614,14 +612,16 @@ extract_subtitle() {
     # SRT_SIZE_THRESHOLD percent; otherwise the extracted version takes
     # precedence. Extracted SRTs with fewer than SRT_MIN_CUES cues are
     # discarded to avoid writing scene-brand or watermark tracks.
+    # Usage: extract_subtitle <input> <target.srt> [<track_index>]
+    # The optional track_index lets process_video pass a previously-probed
+    # index so we don't re-run ffprobe on the same input.
     local input_file="$1"
     local target_srt="$2"
+    local track_index="${3:-}"
 
-    local track_index
-    track_index=$(_find_eng_subtitle_track "$input_file")
+    [[ -z "$track_index" ]] && track_index=$(_find_eng_subtitle_track "$input_file")
     [[ -z "$track_index" ]] && return 0
 
-    # Extract to a temp file
     local temp_srt
     temp_srt="$(mktemp --suffix=.srt)"
     if ! ffmpeg -v quiet -i "$input_file" -map "0:$track_index" -c:s srt "$temp_srt" 2>/dev/null; then
