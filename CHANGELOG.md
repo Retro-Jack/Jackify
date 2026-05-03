@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.10 — 2026-05-03
+
+### Fixed
+- **MP4 subtitle extraction** — MP4 muxers commonly leave the subtitle language tag as `und` (undefined) instead of `eng`, so the strict `lang == "eng"` filter was rejecting otherwise-valid English `mov_text` tracks. `_find_eng_subtitle_track` now prefers an `eng`-tagged track but falls back to the first `und` or empty-language text track when none is present. Foreign-language tags are still skipped.
+
+---
+
 ## v1.4.9 — 2026-05-03
 
 ### Changed

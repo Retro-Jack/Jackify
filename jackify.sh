@@ -588,21 +588,28 @@ remove_title_number() {
 }
 
 _find_eng_subtitle_track() {
-    # Echoes the index of the first English, non-hearing-impaired, text-based
-    # subtitle stream in <input_file>, or nothing if no such track exists.
+    # Echoes the index of an English (or untagged) non-hearing-impaired
+    # text-based subtitle stream in <input_file>, or nothing if none exists.
+    # Preference order: eng > und/empty. Foreign-language tags are skipped.
+    # MP4 muxers commonly leave the language as `und`, so the fallback is
+    # required for that container family.
     # ffprobe emits stream_disposition fields before stream_tags fields
     # regardless of -show_entries order, so the columns are: idx,codec,hi,lang.
     local input_file="$1"
     local text_codecs="subrip|ass|ssa|webvtt|mov_text|microdvd"
+    local eng_idx="" und_idx=""
     while IFS=',' read -r idx codec hi lang; do
-        lang="${lang,,}"
-        if [[ "$lang" == "eng" && "$hi" != "1" && "$codec" =~ ^($text_codecs)$ ]]; then
-            printf '%s' "$idx"
-            return 0
-        fi
+        [[ "$hi" == "1" ]] && continue
+        [[ "$codec" =~ ^($text_codecs)$ ]] || continue
+        case "${lang,,}" in
+            eng) [[ -z "$eng_idx" ]] && eng_idx="$idx" ;;
+            ""|und) [[ -z "$und_idx" ]] && und_idx="$idx" ;;
+        esac
     done < <(ffprobe -v quiet -select_streams s \
         -show_entries stream=index,codec_name:stream_tags=language:stream_disposition=hearing_impaired \
         -of csv=p=0 "$input_file" 2>/dev/null)
+    if [[ -n "$eng_idx" ]]; then printf '%s' "$eng_idx"; return 0; fi
+    if [[ -n "$und_idx" ]]; then printf '%s' "$und_idx"; return 0; fi
     return 1
 }
 
