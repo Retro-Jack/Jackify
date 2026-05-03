@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.5 — 2026-05-03
+
+### Added
+- **SDH content heuristic** — extracted subtitles with two or more `[...]` or `(...)` pairs anywhere in the file are now treated as SDH/HI and discarded. The container's `hearing_impaired` disposition flag is rarely set on scene/torrent rips, so this fills the gap by catching common SDH cue markers (`[door slams]`, `(LAUGHTER)`, etc.). The check runs after the cue-count guard inside `extract_subtitle`.
+
+---
+
 ## v1.4.4 — 2026-05-03
 
 ### Changed

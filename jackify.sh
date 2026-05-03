@@ -639,6 +639,18 @@ extract_subtitle() {
         return 0
     fi
 
+    # SDH/HI heuristic: SDH tracks pepper sound-effect and speaker cues in
+    # square brackets or parentheses ([door slams], (LAUGHTER), etc.). Two or
+    # more such pairs anywhere in the file is treated as a strong SDH signal,
+    # since a non-HI track will at most have an occasional parenthetical aside.
+    local bracket_pairs
+    bracket_pairs=$(grep -oE '\[[^]]*\]|\([^)]*\)' "$temp_srt" 2>/dev/null | wc -l)
+    if [[ $bracket_pairs -ge 2 ]]; then
+        rm -f "$temp_srt"
+        echo "  Subtitle: $bracket_pairs bracket/paren pair(s) — likely SDH, ignoring"
+        return 0
+    fi
+
     if [[ -f "$target_srt" ]]; then
         local existing_size extracted_size
         existing_size=$(stat -c%s "$target_srt")
