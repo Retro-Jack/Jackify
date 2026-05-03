@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.2 — 2026-05-03
+
+### Added
+- **`DDP5.1`** added to the source-tag stripper (Dolby Digital Plus audio tag).
+- **`GALAXYRG265`** added to the release-group stripper.
+
+### Fixed
+- Subtitle copy message now reads "Copying subtitles" (was "Copying subtitle").
+
+---
+
 ## v1.4.1 — 2026-05-02
 
 ### Changed

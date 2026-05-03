@@ -408,7 +408,7 @@ process_video() {
             sub_name="$(basename "$sub")"
             if [[ "${sub_name%.*}" == "$stem" ]]; then
                 echo
-                echo "    Copying subtitle: $sub_name"
+                echo "    Copying subtitles: $sub_name"
                 local sub_cp_err
                 if ! sub_cp_err=$(cp "$sub" "$output_dir/" 2>&1); then
                     warn "Subtitle copy failed: $sub_name" "src: $sub
@@ -494,11 +494,11 @@ strip_source_tags() {
 my $t = qr/2160p|1080p|720p|480p|4K|UHD|
     Blu-?Ray|BDRip|BRRip|WEB-DL|WEBRip|HDTV|DVDRip|DVDScr|AMZN|NF|HULU|DSNP|
     H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
-    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC|MP3|7\.1|5\.1|
+    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC|MP3|7\.1|5\.1|DDP5.1|
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
     YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
-    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|
+    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|GALAXYRG265|
     HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|
     NTG|FLUX|ION10|CAKES|PECULATE|
