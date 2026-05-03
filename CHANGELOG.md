@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.12 — 2026-05-03
+
+### Fixed
+- **Title-number stripping** — the `## - name` prefix removal was scoped to `*.${OUTPUT_FORMAT}` (i.e. `*.mp4`) only and skipped `.srt` siblings entirely. It also never ran on directories, so `1 - Foo Folder/` stayed prefixed. `remove_title_number` now follows the same `<directory> [--recursive] [--dirs]` shape as the other cleanup functions, walks all media files (video + subtitle) plus folders, and preserves the existing `(1)`, `(2)`, … collision-handling.
+
+---
+
 ## v1.4.11 — 2026-05-03
 
 ### Changed

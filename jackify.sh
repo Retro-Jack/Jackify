@@ -558,33 +558,43 @@ PERL
 }
 
 remove_title_number() {
-    # Strips HandBrake DVD title number prefixes ("## - name.ext" -> "name.ext").
-    # If stripping would cause a filename collision, appends (1), (2), etc.
-    local filepath filename stem ext new_stem new_name n
-    filepath="$(dirname "$1")"
-    filename="$(basename "$1")"
-    stem="${filename%.*}"
-    ext="${filename##*.}"
+    # Strips HandBrake DVD title number prefixes ("## - name[.ext]" -> "name[.ext]")
+    # from files and directories. On collision, appends (1), (2), … to the new name.
+    # Usage: remove_title_number <directory> [--recursive] [--dirs]
+    local directory="$1"
+    local recursive=false dirs_only=false
+    shift 1
+    _parse_find_opts recursive dirs_only "$@"
+    local -a find_args
+    _build_find_args find_args "$directory" "$recursive" "$dirs_only"
 
-    [[ "$stem" =~ ^([0-9]+)[[:space:]]+-[[:space:]]+(.+)$ ]] || return 0
-
-    new_stem="${BASH_REMATCH[2]}"
-    new_name="${new_stem}.${ext}"
-
-    if [[ -f "$filepath/$new_name" ]]; then
-        n=1
-        while [[ -f "$filepath/${new_stem}(${n}).${ext}" ]]; do
-            n=$((n + 1))
-        done
-        new_name="${new_stem}(${n}).${ext}"
-    fi
-
-    echo "  Renaming: $filename -> $new_name"
-    local mv_err
-    if ! mv_err=$(mv "$filepath/$filename" "$filepath/$new_name" 2>&1); then
-        warn "Could not rename: $filepath/$filename -> $new_name" "$mv_err"
-        ((rename_errors++))
-    fi
+    local item parent name stem ext target new_target new_name n mv_err
+    while IFS= read -r -d '' item; do
+        parent="$(dirname "$item")"
+        name="$(basename "$item")"
+        if [[ ! -d "$item" && "$name" == *.* ]]; then
+            stem="${name%.*}"; ext="${name##*.}"
+            target="$stem"
+        else
+            ext=""
+            target="$name"
+        fi
+        [[ "$target" =~ ^([0-9]+)[[:space:]]+-[[:space:]]+(.+)$ ]] || continue
+        new_target="${BASH_REMATCH[2]}"
+        new_name="${new_target}${ext:+.$ext}"
+        if [[ -e "$parent/$new_name" && "$parent/$new_name" != "$item" ]]; then
+            n=1
+            while [[ -e "$parent/${new_target}(${n})${ext:+.$ext}" ]]; do
+                n=$((n + 1))
+            done
+            new_name="${new_target}(${n})${ext:+.$ext}"
+        fi
+        echo "  Renaming: $name -> $new_name"
+        if ! mv_err=$(mv "$item" "$parent/$new_name" 2>&1); then
+            warn "Could not rename: $item -> $new_name" "$mv_err"
+            ((rename_errors++))
+        fi
+    done < <(find "${find_args[@]}" -print0 2>/dev/null)
 }
 
 _find_eng_subtitle_track() {
@@ -821,9 +831,8 @@ pause_and_clear
 
 print_header "STEP 3: Cleaning Up Names"
 
-while IFS= read -r -d '' file; do
-    remove_title_number "$file"
-done < <(find "$OUTPUT_DIR" -type f -name "*.${OUTPUT_FORMAT}" -print0)
+remove_title_number "$OUTPUT_DIR" --recursive
+remove_title_number "$OUTPUT_DIR" --dirs
 
 echo "Stripping source tags..."
 strip_source_tags "$OUTPUT_DIR" --recursive
