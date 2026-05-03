@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.4.14 — 2026-05-03
+
+### Changed
+- **Final report layout** — restructured into three sections separated by `------------------------` rules:
+  1. Preset / videos found / videos converted
+  2. Subtitle counters: `Found subs`, `Found subs burned`, `Subs extracted`, `Extracted subs burned` (always shown, even when zero)
+  3. Name cleanup / videos skipped / failure counters (failures only shown when non-zero)
+- **Burn-counter split** — the single `Burned subs made` total has been replaced by the per-source split: `Found subs burned` (burns whose `.srt` was a pre-existing sibling) and `Extracted subs burned` (burns whose `.srt` was just extracted from the source). The internal `videos_burned` aggregate has been removed.
+- **`Found subs` counter** — counts videos that had a sibling `.srt` available before extraction was attempted.
+
+---
+
 ## v1.4.13 — 2026-05-03
 
 ### Added

@@ -54,7 +54,8 @@ files_failed=0
 videos_converted=0
 videos_skipped=0
 videos_failed=0
-videos_burned=0
+subs_found=0
+found_subs_burned=0
 subs_extracted=0
 extracted_subs_burned=0
 rename_errors=0
@@ -417,7 +418,12 @@ process_video() {
         echo "[SUCCESS] Conversion complete"
         ((videos_converted++))
 
+        local had_sibling_srt=false
+        [[ -f "$input_dir/$stem.srt" ]] && had_sibling_srt=true
+
         extract_subtitle "$input_file" "$input_dir/$stem.srt" "$embedded_track"
+        $had_sibling_srt && ((subs_found++))
+
         while IFS= read -r -d '' sub; do
             local sub_name
             sub_name="$(basename "$sub")"
@@ -456,8 +462,11 @@ $sub_cp_err"
                 if [[ $burn_ok -eq 0 ]]; then
                     _current_output=""
                     echo "    [SUCCESS] Burned subs complete"
-                    ((videos_burned++))
-                    $_last_extract_wrote && ((extracted_subs_burned++))
+                    if $_last_extract_wrote; then
+                        ((extracted_subs_burned++))
+                    else
+                        ((found_subs_burned++))
+                    fi
                 else
                     _current_output=""
                     rm -f "$burned_file"
@@ -880,14 +889,17 @@ echo
 printf 'Preset:                %s\n' "$PRESET_NAME"
 printf 'Videos found:          %d\n' "$total_videos"
 printf 'Videos converted:      %d\n' "$videos_converted"
-[[ $subs_extracted        -gt 0 ]] && printf 'Subs extracted:        %d\n' "$subs_extracted"
-[[ $videos_burned         -gt 0 ]] && printf 'Burned subs made:      %d\n' "$videos_burned"
-[[ $extracted_subs_burned -gt 0 ]] && printf 'Extracted subs burned: %d\n' "$extracted_subs_burned"
+echo  "------------------------"
+printf 'Found subs:            %d\n' "$subs_found"
+printf 'Found subs burned:     %d\n' "$found_subs_burned"
+printf 'Subs extracted:        %d\n' "$subs_extracted"
+printf 'Extracted subs burned: %d\n' "$extracted_subs_burned"
+echo  "------------------------"
+echo  "Name cleanup:          Completed"
 printf 'Videos skipped:        %d\n' "$videos_skipped"
 [[ $videos_failed         -gt 0 ]] && printf 'Videos failed:         %d\n' "$videos_failed"
 [[ $files_failed          -gt 0 ]] && printf 'Copy failures:         %d\n' "$files_failed"
 [[ $rename_errors         -gt 0 ]] && printf 'Rename errors:         %d\n' "$rename_errors"
-echo "Name cleanup:          Completed"
 echo
 [[ -f "$ERROR_LOG" ]] && echo "Errors logged to:      $ERROR_LOG"
 echo
