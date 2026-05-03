@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.5.1 — 2026-05-03
+
+### Changed
+- **Code cleanup** — dropped redundant `stem` locals in `_perl_rename_loop` and `remove_title_number` (they were assigned and immediately reused as `target`); removed the duplicate `_current_output` comment from `process_video` (already documented at the variable's declaration); refreshed `extract_subtitle`'s docstring to mention the `eng → und/empty` language fallback and the content-based SDH check; corrected the `process_video` output-dir comment to read "embedded text-based subtitle track" (drops a stale "eng" qualifier). No behavioural changes.
+
+---
+
 ## v1.4.16 — 2026-05-03
 
 ### Changed

@@ -220,14 +220,14 @@ _perl_rename_loop() {
     local -a find_args
     _build_find_args find_args "$directory" "$recursive" "$dirs_only"
 
-    local item name stem ext target new_target new_name perl_err
+    local item name ext target new_target new_name perl_err
     while IFS= read -r -d '' item; do
         name="$(basename "$item")"
         if $stem_only && [[ "$name" == *.* && ! -d "$item" ]]; then
-            stem="${name%.*}"; ext="${name##*.}"
-            target="$stem"
+            ext="${name##*.}"
+            target="${name%.*}"
         else
-            stem=""; ext=""
+            ext=""
             target="$name"
         fi
         perl_err=$(mktemp)
@@ -335,8 +335,8 @@ process_video() {
     # already exists. Output destination depends on context:
     #   - Sibling videos in the same folder       -> preserve relative path under OUTPUT_DIR.
     #   - Lone TV episode (SxxExx pattern)        -> OUTPUT_DIR/<Show> - Season <N>/.
-    #   - Lone video with sibling subs OR an
-    #     embedded eng text-based subtitle track  -> OUTPUT_DIR/<source folder>/
+    #   - Lone video with a sibling subtitle OR
+    #     an embedded text-based subtitle track   -> OUTPUT_DIR/<source folder>/
     #                                                (or OUTPUT_DIR/<stem>/ if at staging root)
     #                                                so the .mp4, .srt, and burned-subs files stay grouped.
     #   - Otherwise                               -> OUTPUT_DIR/ (flat).
@@ -402,9 +402,8 @@ process_video() {
     echo
     echo "$(basename "$input_file")"
 
-    # _current_output is cleared by the EXIT trap on interruption, which
-    # removes the partial file. --preset-import-file + --preset are both
-    # required to select a named preset from a JSON file.
+    # --preset-import-file + --preset are both required to select a named
+    # preset from a JSON file (HandBrake quirk).
     local hb_ok hb_log
     hb_log=$(mktemp)
     printf '  [%s]   0%%' "$EMPTY_BAR"
@@ -591,13 +590,13 @@ remove_title_number() {
     local -a find_args
     _build_find_args find_args "$directory" "$recursive" "$dirs_only"
 
-    local item parent name stem ext target new_target new_name n mv_err
+    local item parent name ext target new_target new_name n mv_err
     while IFS= read -r -d '' item; do
         parent="$(dirname "$item")"
         name="$(basename "$item")"
         if [[ ! -d "$item" && "$name" == *.* ]]; then
-            stem="${name%.*}"; ext="${name##*.}"
-            target="$stem"
+            ext="${name##*.}"
+            target="${name%.*}"
         else
             ext=""
             target="$name"
@@ -648,12 +647,14 @@ _find_eng_subtitle_track() {
 }
 
 extract_subtitle() {
-    # Extracts an English, non-hearing-impaired, text-based subtitle track from
-    # a video file and writes it to a target .srt path. If the target already
-    # exists, the larger file wins when the size difference exceeds
-    # SRT_SIZE_THRESHOLD percent; otherwise the extracted version takes
-    # precedence. Extracted SRTs with fewer than SRT_MIN_CUES cues are
-    # discarded to avoid writing scene-brand or watermark tracks.
+    # Extracts a text-based subtitle track (eng-preferred, und/empty fallback;
+    # foreign tags skipped; HI disposition skipped) from <input> and writes it
+    # to <target.srt>. After ffmpeg extraction the SRT is rejected if it has
+    # fewer than SRT_MIN_CUES cues (scene brands / watermarks) or if it
+    # contains 10+ bracket/paren pairs (likely SDH — see comment below).
+    # If <target.srt> already exists, the larger file wins when the size
+    # difference exceeds SRT_SIZE_THRESHOLD percent; otherwise the extracted
+    # version takes precedence.
     # Usage: extract_subtitle <input> <target.srt> [<track_index>]
     # The optional track_index lets process_video pass a previously-probed
     # index so we don't re-run ffprobe on the same input.
