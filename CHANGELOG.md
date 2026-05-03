@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.13 — 2026-05-03
+
+### Added
+- **Final report counters** — added `Subs extracted` (count of times an embedded track was extracted and written/replaced the target `.srt`) and `Extracted subs burned` (count of burns whose source `.srt` was the just-extracted one rather than a pre-existing sibling). Both lines only render when their counter is non-zero. Report column padding widened to fit the new labels.
+
+---
+
 ## v1.4.12 — 2026-05-03
 
 ### Fixed

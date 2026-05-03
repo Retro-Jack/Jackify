@@ -55,7 +55,14 @@ videos_converted=0
 videos_skipped=0
 videos_failed=0
 videos_burned=0
+subs_extracted=0
+extracted_subs_burned=0
 rename_errors=0
+
+# Set true by extract_subtitle when it actually writes/replaces the target .srt
+# (i.e. the extracted track won out over any existing file). Read by
+# process_video to attribute a subsequent burn to "extracted" vs "pre-existing".
+_last_extract_wrote=false
 
 # Set by process_video while HandBrake is running; the EXIT trap removes the
 # partial output file if the script is interrupted mid-conversion.
@@ -450,6 +457,7 @@ $sub_cp_err"
                     _current_output=""
                     echo "    [SUCCESS] Burned subs complete"
                     ((videos_burned++))
+                    $_last_extract_wrote && ((extracted_subs_burned++))
                 else
                     _current_output=""
                     rm -f "$burned_file"
@@ -638,6 +646,7 @@ extract_subtitle() {
     local target_srt="$2"
     local track_index="${3:-}"
 
+    _last_extract_wrote=false
     [[ -z "$track_index" ]] && track_index=$(_find_eng_subtitle_track "$input_file")
     [[ -z "$track_index" ]] && return 0
 
@@ -686,6 +695,8 @@ extract_subtitle() {
         if [[ $pct -gt $SRT_SIZE_THRESHOLD ]]; then
             if [[ $extracted_size -gt $existing_size ]]; then
                 mv "$temp_srt" "$target_srt"
+                _last_extract_wrote=true
+                ((subs_extracted++))
                 echo "  Subtitle: using extracted (${pct}% larger than existing)"
             else
                 rm -f "$temp_srt"
@@ -693,10 +704,14 @@ extract_subtitle() {
             fi
         else
             mv "$temp_srt" "$target_srt"
+            _last_extract_wrote=true
+            ((subs_extracted++))
             echo "  Subtitle: using extracted (sizes similar, ${pct}% difference)"
         fi
     else
         mv "$temp_srt" "$target_srt"
+        _last_extract_wrote=true
+        ((subs_extracted++))
         echo "  Subtitle: extracted from embedded track ($cue_count cues)"
     fi
 }
@@ -862,17 +877,19 @@ pause_and_clear
 
 print_header "Processing Complete"
 echo
-printf 'Preset:           %s\n' "$PRESET_NAME"
-printf 'Videos found:     %d\n' "$total_videos"
-printf 'Videos converted: %d\n' "$videos_converted"
-[[ $videos_burned    -gt 0 ]] && printf 'Burned subs made: %d\n' "$videos_burned"
-printf 'Videos skipped:   %d\n' "$videos_skipped"
-[[ $videos_failed  -gt 0 ]] && printf 'Videos failed:    %d\n' "$videos_failed"
-[[ $files_failed   -gt 0 ]] && printf 'Copy failures:    %d\n' "$files_failed"
-[[ $rename_errors  -gt 0 ]] && printf 'Rename errors:    %d\n' "$rename_errors"
-echo "Name cleanup:     Completed"
+printf 'Preset:                %s\n' "$PRESET_NAME"
+printf 'Videos found:          %d\n' "$total_videos"
+printf 'Videos converted:      %d\n' "$videos_converted"
+[[ $subs_extracted        -gt 0 ]] && printf 'Subs extracted:        %d\n' "$subs_extracted"
+[[ $videos_burned         -gt 0 ]] && printf 'Burned subs made:      %d\n' "$videos_burned"
+[[ $extracted_subs_burned -gt 0 ]] && printf 'Extracted subs burned: %d\n' "$extracted_subs_burned"
+printf 'Videos skipped:        %d\n' "$videos_skipped"
+[[ $videos_failed         -gt 0 ]] && printf 'Videos failed:         %d\n' "$videos_failed"
+[[ $files_failed          -gt 0 ]] && printf 'Copy failures:         %d\n' "$files_failed"
+[[ $rename_errors         -gt 0 ]] && printf 'Rename errors:         %d\n' "$rename_errors"
+echo "Name cleanup:          Completed"
 echo
-[[ -f "$ERROR_LOG" ]] && echo "Errors logged to: $ERROR_LOG"
+[[ -f "$ERROR_LOG" ]] && echo "Errors logged to:      $ERROR_LOG"
 echo
 
 read -r -p "Clean staging folder? [y/N] " answer
