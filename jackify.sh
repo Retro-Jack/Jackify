@@ -37,7 +37,7 @@ PROCESS_DELAY=2
 
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
 SUBTITLE_EXTENSIONS=(srt ass ssa vtt sub idx sup)
-EXCLUDED_BASENAMES=(sample preview featurette)
+EXCLUDED_BASENAMES=(sample preview)
 
 ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 
@@ -529,7 +529,7 @@ my $t = qr/2160p|1080p|720p|480p|4K|UHD|
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
     YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
-    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|GALAXYRG265|
+    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|
     HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|
     NTG|FLUX|ION10|CAKES|PECULATE|

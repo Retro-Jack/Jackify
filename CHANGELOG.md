@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.5.3 — 2026-05-03
+
+### Changed
+- **Excluded basenames** — removed `featurette` from `EXCLUDED_BASENAMES`; only `sample` and `preview` files are now skipped during the copy step.
+
+---
+
 ## v1.5.2 — 2026-05-03
 
 ### Added
