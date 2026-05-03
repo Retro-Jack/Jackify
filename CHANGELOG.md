@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5.2 — 2026-05-03
+
+### Added
+- **SRT encoding normalisation** — new `_normalise_srt` helper runs after the move/extract step and before each burn pass. It strips any leading UTF-8 BOM in place, detects the file's encoding via `uchardet` (preferred — most reliable on short/Cyrillic SRTs) with a `file -bi` fallback, and runs `iconv -t UTF-8` when the source isn't already UTF-8/ASCII. This lets multibyte glyphs — musical notes (`♪♫`), em-dashes, smart quotes, and non-Latin accents — survive HandBrake's `--srt-codeset UTF-8` burn pass instead of being mangled when the sibling SRT was Windows-1252 / ISO-8859-x.
+
+### Changed
+- **Optional dependency: `uchardet`** — present on Arch / Debian / Fedora by default; the script falls back to `file -bi` when it's missing, so it's not added to the prerequisite check.
+
+---
+
 ## v1.5.1 — 2026-05-03
 
 ### Changed

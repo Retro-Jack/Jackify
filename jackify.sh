@@ -446,6 +446,7 @@ $sub_mv_err"
 
         local srt_path="$output_dir/$stem.srt"
         if [[ -f "$srt_path" ]]; then
+            _normalise_srt "$srt_path"
             local burned_file="$output_dir/$stem burned subs.${OUTPUT_FORMAT}"
             if [[ -f "$burned_file" ]]; then
                 echo "  [BURNED SUBS] Already exists, skipping"
@@ -644,6 +645,49 @@ _find_eng_subtitle_track() {
     if [[ -n "$eng_idx" ]]; then printf '%s' "$eng_idx"; return 0; fi
     if [[ -n "$und_idx" ]]; then printf '%s' "$und_idx"; return 0; fi
     return 1
+}
+
+_normalise_srt() {
+    # Convert <srt_path> to UTF-8 without BOM, in place. Guarantees the bytes
+    # match HandBrake's --srt-codeset UTF-8 contract so multibyte glyphs
+    # (♪♫, em-dashes, smart quotes, accents) survive the burn pass instead
+    # of being mangled when the source SRT was Windows-1252 / ISO-8859-x.
+    # Encoding detection uses uchardet when available (most reliable on
+    # short SRTs), falling back to file -bi.
+    local srt="$1"
+    [[ -f "$srt" ]] || return 0
+
+    # Strip a UTF-8 BOM (EF BB BF) in place — libass and some renderers
+    # treat the BOM as the first cue's first character.
+    if [[ "$(head -c 3 "$srt" 2>/dev/null | od -An -tx1 | tr -d ' \n')" == "efbbbf" ]]; then
+        local tmp
+        tmp="$(mktemp --suffix=.srt)"
+        tail -c +4 "$srt" > "$tmp" && mv "$tmp" "$srt"
+        echo "  Subtitle: stripped UTF-8 BOM from $(basename "$srt")"
+    fi
+
+    local enc=""
+    if command -v uchardet &>/dev/null; then
+        enc="$(uchardet "$srt" 2>/dev/null)"
+    fi
+    if [[ -z "$enc" || "$enc" == "unknown" ]]; then
+        enc="$(file -bi "$srt" 2>/dev/null | sed -n 's/.*charset=//p')"
+    fi
+    enc="${enc,,}"
+
+    case "$enc" in
+        utf-8|us-ascii|ascii|"") return 0 ;;
+    esac
+
+    local tmp
+    tmp="$(mktemp --suffix=.srt)"
+    if iconv -f "$enc" -t UTF-8 "$srt" > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$srt"
+        echo "  Subtitle: converted $(basename "$srt") from $enc to UTF-8"
+    else
+        rm -f "$tmp"
+        warn "SRT encoding conversion failed: $(basename "$srt")" "detected: $enc"
+    fi
 }
 
 extract_subtitle() {
