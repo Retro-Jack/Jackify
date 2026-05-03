@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.3 — 2026-05-03
+
+### Fixed
+- **Subtitle extraction** — ffprobe emits `stream_disposition` fields before `stream_tags` fields regardless of `-show_entries` order, so the columns produced by the existing query were `idx,codec,hi,lang`, not `idx,codec,lang,hi`. The read assignment had `lang` and `hi` swapped, which meant `lang` was always `"0"` and never matched `"eng"` — silently disabling embedded subtitle extraction since v1.4.0. Read order corrected.
+
+---
+
 ## v1.4.2 — 2026-05-03
 
 ### Added

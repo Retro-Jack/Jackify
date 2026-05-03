@@ -591,9 +591,11 @@ extract_subtitle() {
     # Text-based subtitle codecs convertible to SRT
     local text_codecs="subrip|ass|ssa|webvtt|mov_text|microdvd"
 
-    # Find the first English, non-hearing-impaired, text-based subtitle stream
+    # Find the first English, non-hearing-impaired, text-based subtitle stream.
+    # ffprobe emits stream_disposition fields before stream_tags fields
+    # regardless of -show_entries order, so the columns are: idx,codec,hi,lang.
     local track_index=""
-    while IFS=',' read -r idx codec lang hi; do
+    while IFS=',' read -r idx codec hi lang; do
         lang="${lang,,}"
         if [[ "$lang" == "eng" && "$hi" != "1" && "$codec" =~ ^($text_codecs)$ ]]; then
             track_index="$idx"
