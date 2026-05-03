@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.7 — 2026-05-03
+
+### Fixed
+- **Subtitle extraction freeze** — `mktemp` pre-created the SRT target, so `ffmpeg` saw the file already existed and silently waited on stdin for "File exists, overwrite? [y/N]"; the script appeared to hang until Enter was pressed. Added `-y` to skip the prompt.
+- **Cue-count regex** — extracted SRTs commonly use CRLF line endings, which made `^[0-9]+$` match nothing. Updated to `^[0-9]+\r?$` so cue counting works on both LF and CRLF files.
+- **`cue_count` parsing** — `grep -c ... || echo 0` produced `"0\n0"` (grep prints `0` to stdout *and* exits non-zero on no match, which then triggered the `|| echo 0` to append a second `0`), causing `[[ $cue_count -lt … ]]` to throw an arithmetic syntax error. Replaced with `${cue_count:-0}` fallback after a clean `grep -c`.
+
+---
+
 ## v1.4.6 — 2026-05-03
 
 ### Changed

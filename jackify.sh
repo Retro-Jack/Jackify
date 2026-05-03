@@ -624,15 +624,17 @@ extract_subtitle() {
 
     local temp_srt
     temp_srt="$(mktemp --suffix=.srt)"
-    if ! ffmpeg -v quiet -i "$input_file" -map "0:$track_index" -c:s srt "$temp_srt" 2>/dev/null; then
+    if ! ffmpeg -v quiet -y -i "$input_file" -map "0:$track_index" -c:s srt "$temp_srt" 2>/dev/null; then
         rm -f "$temp_srt"
         warn "Subtitle extraction failed for: $(basename "$input_file")"
         return 0
     fi
 
-    # Reject trivially short extractions (scene brands, watermarks, etc.)
+    # Reject trivially short extractions (scene brands, watermarks, etc.).
+    # Allow trailing \r since extracted SRTs commonly use CRLF line endings.
     local cue_count
-    cue_count=$(grep -c '^[0-9][0-9]*$' "$temp_srt" 2>/dev/null || echo 0)
+    cue_count=$(grep -cE $'^[0-9]+\r?$' "$temp_srt" 2>/dev/null)
+    cue_count=${cue_count:-0}
     if [[ $cue_count -lt $SRT_MIN_CUES ]]; then
         rm -f "$temp_srt"
         echo "  Subtitle: extracted track has only $cue_count cue(s) — ignoring"
