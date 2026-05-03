@@ -9,7 +9,7 @@
 # Pipeline:
 #   1. Copy: DOWNLOADS_DIR -> STAGING_DIR (skipped if downloads is empty)
 #   2. Convert: HandBrakeCLI on each video; if a matching .srt is present,
-#      produce an additional " - burned subs" copy
+#      produce an additional " burned subs" copy
 #   3. Clean names: strip tags/encoder groups, wrap years in parens, normalise
 #      separators, apply title case (with apostrophe + acronym handling)
 #
@@ -332,7 +332,7 @@ process_video() {
     #   - Otherwise                               -> OUTPUT_DIR/ (flat).
     # On success: copies matching subtitle files alongside the output, and if
     # a same-stem .srt exists, runs a second HandBrake pass to produce
-    # "<stem> - burned subs.mp4".
+    # "<stem> burned subs.mp4".
     # Usage: process_video <input> <current_index> <total>
     local input_file="$1"
     local current_num="$2"
@@ -428,7 +428,7 @@ $sub_cp_err"
 
         local srt_path="$input_dir/$stem.srt"
         if [[ -f "$srt_path" ]]; then
-            local burned_file="$output_dir/$stem - burned subs.${OUTPUT_FORMAT}"
+            local burned_file="$output_dir/$stem burned subs.${OUTPUT_FORMAT}"
             if [[ -f "$burned_file" ]]; then
                 echo "  [BURNED SUBS] Already exists, skipping"
             else
@@ -528,8 +528,9 @@ apply_title_case() {
     # Title-cases basenames (stem only, for files). Minor words (a, an, the,
     # and, …) stay lowercase unless they start the name. Short all-caps tokens
     # (DVD, HD, TV) are preserved. Apostrophes (straight and curly) are part of
-    # the word so "Don't" stays "Don't". The " - burned subs" suffix is stripped
-    # before casing and re-appended verbatim, with or without an existing dash.
+    # the word so "Don't" stays "Don't". The " burned subs" suffix is stripped
+    # before casing and re-appended verbatim (matching with or without a legacy
+    # dash so older outputs are normalised on rerun).
     # Usage: apply_title_case <directory> [--recursive] [--dirs]
     local directory="$1"
     local recursive=false dirs_only=false
@@ -540,7 +541,7 @@ apply_title_case() {
     perl_script=$(cat <<'PERL'
 my @minor = qw(a an the and but or nor for so yet at by in of on to up as);
 my $burned = "";
-if (s/\s*-?\s*burned subs\s*$//i) { $burned = " - burned subs"; }
+if (s/\s*-?\s*burned subs\s*$//i) { $burned = " burned subs"; }
 s/(\w[\w'\x{2019}]*)/do{
     my $orig=$1; my $w=lc($1);
     ($orig eq uc($orig) && length($orig)>1 && length($orig)<=4 && !grep{$_ eq lc($orig)}@minor) ? $orig :

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.9 — 2026-05-03
+
+### Changed
+- **Burned-subs filename** — output is now `<stem> burned subs.mp4` (single space, no dash). The title-case preserve regex still tolerates a legacy dash so older outputs are normalised on rerun.
+
+---
+
 ## v1.4.8 — 2026-05-03
 
 ### Fixed
