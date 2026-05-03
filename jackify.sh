@@ -651,12 +651,13 @@ extract_subtitle() {
     fi
 
     # SDH/HI heuristic: SDH tracks pepper sound-effect and speaker cues in
-    # square brackets or parentheses ([door slams], (LAUGHTER), etc.). Two or
-    # more such pairs anywhere in the file is treated as a strong SDH signal,
-    # since a non-HI track will at most have an occasional parenthetical aside.
+    # square brackets or parentheses ([door slams], (LAUGHTER), etc.). Ten or
+    # more such pairs anywhere in the file is treated as a strong SDH signal;
+    # a normal dialogue track may have a handful of legitimate parentheticals
+    # (song titles, asides) so a low threshold causes false positives.
     local bracket_pairs
     bracket_pairs=$(grep -oE '\[[^]]*\]|\([^)]*\)' "$temp_srt" 2>/dev/null | wc -l)
-    if [[ $bracket_pairs -ge 2 ]]; then
+    if [[ $bracket_pairs -ge 10 ]]; then
         rm -f "$temp_srt"
         echo "  Subtitle: $bracket_pairs bracket/paren pair(s) — likely SDH, ignoring"
         return 0

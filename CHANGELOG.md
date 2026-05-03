@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.11 — 2026-05-03
+
+### Changed
+- **SDH heuristic threshold** — raised from 2 bracket/paren pairs to 10. The 2-pair threshold caused false positives on normal dialogue tracks that contain a handful of legitimate parentheticals (song titles, asides). Real SDH tracks pepper their entire runtime with sound-effect cues, so 10+ pairs remains a strong signal.
+
+---
+
 ## v1.4.10 — 2026-05-03
 
 ### Fixed
