@@ -1,13 +1,5 @@
 # Changelog
 
-## v1.5.0 — 2026-05-03
-
-### Changed
-- **Subtitle workflow** — sibling `.srt` (and other subtitle extension) files are now **moved** from `STAGING_DIR` to `OUTPUT_DIR` after conversion (previously copied, leaving duplicates in staging). Embedded subtitle extraction also writes its `.srt` directly into `OUTPUT_DIR` (previously written next to the source in staging). The burned-subs HandBrake pass now reads the `.srt` from `OUTPUT_DIR`. Net effect: the converted `.mp4`, the `.srt`, and the burned-subs `.mp4` all live together in the output folder, and staging is left clean of subtitle leftovers.
-- **Console message** — "Copying subtitles" → "Moving subtitles" to match the new behaviour.
-
----
-
 ## v1.4.16 — 2026-05-03
 
 ### Changed
