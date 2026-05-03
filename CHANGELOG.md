@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.8 — 2026-05-03
+
+### Fixed
+- **Burned-subs HandBrake pass freeze** — both `HandBrakeCLI` invocations and the `ffmpeg` extraction call inherited the parent shell's stdin, so any subprocess that read from the tty (libass init, format probe, etc.) could silently block waiting for input — observed as a hang at 0% during the burn pass on x265 sources. All three subprocesses now have stdin redirected from `/dev/null` (`ffmpeg` uses the explicit `-nostdin` flag) so they can never read from the terminal.
+
+---
+
 ## v1.4.7 — 2026-05-03
 
 ### Fixed

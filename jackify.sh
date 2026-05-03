@@ -402,7 +402,7 @@ process_video() {
         -i "$input_file" \
         -o "$output_file" \
         --preset-import-file "$PRESET_FILE" \
-        --preset "$PRESET_NAME" 2>&1; } | tee "$hb_log" | tr '\r' '\n' | show_progress "  "
+        --preset "$PRESET_NAME" </dev/null 2>&1; } | tee "$hb_log" | tr '\r' '\n' | show_progress "  "
     hb_ok=${PIPESTATUS[0]}
 
     if [[ $hb_ok -eq 0 ]]; then
@@ -444,7 +444,7 @@ $sub_cp_err"
                     --preset "$PRESET_NAME" \
                     --srt-file "$srt_path" \
                     --srt-codeset UTF-8 \
-                    --srt-burn 1 2>&1; } | tee "$burn_log" | tr '\r' '\n' | show_progress "    "
+                    --srt-burn 1 </dev/null 2>&1; } | tee "$burn_log" | tr '\r' '\n' | show_progress "    "
                 local burn_ok=${PIPESTATUS[0]}
                 if [[ $burn_ok -eq 0 ]]; then
                     _current_output=""
@@ -624,7 +624,7 @@ extract_subtitle() {
 
     local temp_srt
     temp_srt="$(mktemp --suffix=.srt)"
-    if ! ffmpeg -v quiet -y -i "$input_file" -map "0:$track_index" -c:s srt "$temp_srt" 2>/dev/null; then
+    if ! ffmpeg -nostdin -v quiet -y -i "$input_file" -map "0:$track_index" -c:s srt "$temp_srt" 2>/dev/null; then
         rm -f "$temp_srt"
         warn "Subtitle extraction failed for: $(basename "$input_file")"
         return 0
