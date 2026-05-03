@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.16 — 2026-05-03
+
+### Changed
+- **Final report spacing** — blank line inserted under `Preset:` so the preset name reads as its own header above the counters block.
+
+---
+
 ## v1.4.15 — 2026-05-03
 
 ### Changed
