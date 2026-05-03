@@ -8,8 +8,10 @@
 #
 # Pipeline:
 #   1. Copy: DOWNLOADS_DIR -> STAGING_DIR (skipped if downloads is empty)
-#   2. Convert: HandBrakeCLI on each video; if a matching .srt is present,
-#      produce an additional " burned subs" copy
+#   2. Convert: HandBrakeCLI on each video; sibling subtitles are moved from
+#      staging to OUTPUT_DIR and embedded eng/und text tracks are extracted
+#      directly into OUTPUT_DIR. If a same-stem .srt ends up there, a second
+#      HandBrake pass burns it into a " burned subs" copy.
 #   3. Clean names: strip tags/encoder groups, wrap years in parens, normalise
 #      separators, apply title case (with apostrophe + acronym handling)
 #
@@ -338,9 +340,10 @@ process_video() {
     #                                                (or OUTPUT_DIR/<stem>/ if at staging root)
     #                                                so the .mp4, .srt, and burned-subs files stay grouped.
     #   - Otherwise                               -> OUTPUT_DIR/ (flat).
-    # On success: copies matching subtitle files alongside the output, and if
-    # a same-stem .srt exists, runs a second HandBrake pass to produce
-    # "<stem> burned subs.mp4".
+    # On success: moves matching subtitle files from staging to output_dir,
+    # extracts any embedded eng/und text track directly into output_dir, and
+    # if a same-stem .srt is present there, runs a second HandBrake pass to
+    # produce "<stem> burned subs.mp4".
     # Usage: process_video <input> <current_index> <total>
     local input_file="$1"
     local current_num="$2"
@@ -421,25 +424,28 @@ process_video() {
         local had_sibling_srt=false
         [[ -f "$input_dir/$stem.srt" ]] && had_sibling_srt=true
 
-        extract_subtitle "$input_file" "$input_dir/$stem.srt" "$embedded_track"
-        $had_sibling_srt && ((subs_found++))
-
+        # Move sibling subtitles (any extension) from staging to output_dir
+        # before extraction, so the .srt that extract_subtitle compares against
+        # already lives at its final home and the burn pass reads from there.
         while IFS= read -r -d '' sub; do
             local sub_name
             sub_name="$(basename "$sub")"
             if [[ "${sub_name%.*}" == "$stem" ]]; then
                 echo
-                echo "    Copying subtitles: $sub_name"
-                local sub_cp_err
-                if ! sub_cp_err=$(cp "$sub" "$output_dir/" 2>&1); then
-                    warn "Subtitle copy failed: $sub_name" "src: $sub
+                echo "    Moving subtitles: $sub_name"
+                local sub_mv_err
+                if ! sub_mv_err=$(mv "$sub" "$output_dir/" 2>&1); then
+                    warn "Subtitle move failed: $sub_name" "src: $sub
 dst: $output_dir/
-$sub_cp_err"
+$sub_mv_err"
                 fi
             fi
         done < <(find -L "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
 
-        local srt_path="$input_dir/$stem.srt"
+        extract_subtitle "$input_file" "$output_dir/$stem.srt" "$embedded_track"
+        $had_sibling_srt && ((subs_found++))
+
+        local srt_path="$output_dir/$stem.srt"
         if [[ -f "$srt_path" ]]; then
             local burned_file="$output_dir/$stem burned subs.${OUTPUT_FORMAT}"
             if [[ -f "$burned_file" ]]; then
