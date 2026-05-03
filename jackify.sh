@@ -318,10 +318,13 @@ show_progress() {
 process_video() {
     # Converts a single video with HandBrakeCLI; skips inputs whose target
     # already exists. Output destination depends on context:
-    #   - Sibling videos in the same folder -> preserve relative path under OUTPUT_DIR.
-    #   - Lone TV episode (SxxExx pattern)  -> OUTPUT_DIR/<Show> - Season <N>/.
-    #   - Lone video with sibling subtitles -> OUTPUT_DIR/<source folder>/.
-    #   - Otherwise                         -> OUTPUT_DIR/ (flat).
+    #   - Sibling videos in the same folder       -> preserve relative path under OUTPUT_DIR.
+    #   - Lone TV episode (SxxExx pattern)        -> OUTPUT_DIR/<Show> - Season <N>/.
+    #   - Lone video with sibling subs OR an
+    #     embedded eng text-based subtitle track  -> OUTPUT_DIR/<source folder>/
+    #                                                (or OUTPUT_DIR/<stem>/ if at staging root)
+    #                                                so the .mp4, .srt, and burned-subs files stay grouped.
+    #   - Otherwise                               -> OUTPUT_DIR/ (flat).
     # On success: copies matching subtitle files alongside the output, and if
     # a same-stem .srt exists, runs a second HandBrake pass to produce
     # "<stem> - burned subs.mp4".
@@ -351,9 +354,16 @@ process_video() {
         else
             local sub_count
             sub_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
-            if [[ $sub_count -gt 0 && "$input_dir" != "$STAGING_DIR" ]]; then
+            local has_embedded_subs=0
+            if [[ $sub_count -eq 0 ]] && _find_eng_subtitle_track "$input_file" >/dev/null; then
+                has_embedded_subs=1
+            fi
+            if [[ ($sub_count -gt 0 || $has_embedded_subs -eq 1) && "$input_dir" != "$STAGING_DIR" ]]; then
                 output_dir="$OUTPUT_DIR/$(basename "$input_dir")"
                 output_file="$output_dir/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
+            elif [[ $has_embedded_subs -eq 1 ]]; then
+                output_dir="$OUTPUT_DIR/$stem"
+                output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
             else
                 output_file="$OUTPUT_DIR/$(basename "${input_file%.*}").${OUTPUT_FORMAT}"
                 output_dir="$OUTPUT_DIR"
@@ -578,6 +588,25 @@ remove_title_number() {
     fi
 }
 
+_find_eng_subtitle_track() {
+    # Echoes the index of the first English, non-hearing-impaired, text-based
+    # subtitle stream in <input_file>, or nothing if no such track exists.
+    # ffprobe emits stream_disposition fields before stream_tags fields
+    # regardless of -show_entries order, so the columns are: idx,codec,hi,lang.
+    local input_file="$1"
+    local text_codecs="subrip|ass|ssa|webvtt|mov_text|microdvd"
+    while IFS=',' read -r idx codec hi lang; do
+        lang="${lang,,}"
+        if [[ "$lang" == "eng" && "$hi" != "1" && "$codec" =~ ^($text_codecs)$ ]]; then
+            printf '%s' "$idx"
+            return 0
+        fi
+    done < <(ffprobe -v quiet -select_streams s \
+        -show_entries stream=index,codec_name:stream_tags=language:stream_disposition=hearing_impaired \
+        -of csv=p=0 "$input_file" 2>/dev/null)
+    return 1
+}
+
 extract_subtitle() {
     # Extracts an English, non-hearing-impaired, text-based subtitle track from
     # a video file and writes it to a target .srt path. If the target already
@@ -588,23 +617,8 @@ extract_subtitle() {
     local input_file="$1"
     local target_srt="$2"
 
-    # Text-based subtitle codecs convertible to SRT
-    local text_codecs="subrip|ass|ssa|webvtt|mov_text|microdvd"
-
-    # Find the first English, non-hearing-impaired, text-based subtitle stream.
-    # ffprobe emits stream_disposition fields before stream_tags fields
-    # regardless of -show_entries order, so the columns are: idx,codec,hi,lang.
-    local track_index=""
-    while IFS=',' read -r idx codec hi lang; do
-        lang="${lang,,}"
-        if [[ "$lang" == "eng" && "$hi" != "1" && "$codec" =~ ^($text_codecs)$ ]]; then
-            track_index="$idx"
-            break
-        fi
-    done < <(ffprobe -v quiet -select_streams s \
-        -show_entries stream=index,codec_name:stream_tags=language:stream_disposition=hearing_impaired \
-        -of csv=p=0 "$input_file" 2>/dev/null)
-
+    local track_index
+    track_index=$(_find_eng_subtitle_track "$input_file")
     [[ -z "$track_index" ]] && return 0
 
     # Extract to a temp file

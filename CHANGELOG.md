@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.4 — 2026-05-03
+
+### Changed
+- **Lone video with embedded subtitles** — when a solo video has an extractable English text-based subtitle track but no sibling `.srt`, the converted output is now placed in `OUTPUT_DIR/<source folder>/` (or `OUTPUT_DIR/<stem>/` if it lives at staging root) so the `.mp4`, extracted `.srt`, and burned-subs `.mp4` stay grouped together instead of being dumped flat into `OUTPUT_DIR`.
+- **Refactor** — extracted `_find_eng_subtitle_track` from `extract_subtitle` so the output-dir picker can probe for embedded subs without duplicating the ffprobe query.
+
+---
+
 ## v1.4.3 — 2026-05-03
 
 ### Fixed
