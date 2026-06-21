@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.0 — 2026-06-21
+
+### Added
+- **English-only audio for multi-track sources** — new `_english_audio_args` helper probes the source's audio streams with `ffprobe`. When a file carries more than one audio track, only the English-tagged tracks (`eng`/`en`/`english`) are passed to HandBrake via `--audio`, dropping foreign dubs. Single-track sources are left untouched, so a lone foreign-language track is never lost; likewise a multi-track source with no English stream falls back to the preset's default rather than risk producing a file with no audio. The same selection is reused by the subtitle-burn pass so both outputs stay consistent.
+
+---
+
 ## v1.5.3 — 2026-05-03
 
 ### Changed

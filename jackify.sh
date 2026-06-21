@@ -402,6 +402,13 @@ process_video() {
     echo
     echo "$(basename "$input_file")"
 
+    # When the source has more than one audio track, keep only English ones.
+    # Empty array => leave the preset's audio selection alone (≤1 track, or no
+    # English track present). Reused verbatim by the subtitle-burn pass below.
+    local -a audio_args
+    _english_audio_args audio_args "$input_file"
+    [[ ${#audio_args[@]} -gt 0 ]] && echo "  Audio: multiple tracks — keeping English only (${audio_args[1]})"
+
     # --preset-import-file + --preset are both required to select a named
     # preset from a JSON file (HandBrake quirk).
     local hb_ok hb_log
@@ -412,7 +419,8 @@ process_video() {
         -i "$input_file" \
         -o "$output_file" \
         --preset-import-file "$PRESET_FILE" \
-        --preset "$PRESET_NAME" </dev/null 2>&1; } | tee "$hb_log" | tr '\r' '\n' | show_progress "  "
+        --preset "$PRESET_NAME" \
+        "${audio_args[@]}" </dev/null 2>&1; } | tee "$hb_log" | tr '\r' '\n' | show_progress "  "
     hb_ok=${PIPESTATUS[0]}
 
     if [[ $hb_ok -eq 0 ]]; then
@@ -461,6 +469,7 @@ $sub_mv_err"
                     -o "$burned_file" \
                     --preset-import-file "$PRESET_FILE" \
                     --preset "$PRESET_NAME" \
+                    "${audio_args[@]}" \
                     --srt-file "$srt_path" \
                     --srt-codeset UTF-8 \
                     --srt-burn 1 </dev/null 2>&1; } | tee "$burn_log" | tr '\r' '\n' | show_progress "    "
@@ -526,10 +535,10 @@ my $t = qr/2160p|1080p|720p|480p|4K|UHD|
     Blu-?Ray|BDRip|BRRip|WEB-DL|WEBRip|HDTV|DVDRip|DVDScr|AMZN|NF|HULU|DSNP|
     H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
     TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC|MP3|7\.1|5\.1|DDP5.1|
-    HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|
+    HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|900mb|
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
     YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
-    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|
+    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|GalaxyRG|x264|
     HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|
     NTG|FLUX|ION10|CAKES|PECULATE|
@@ -618,6 +627,37 @@ remove_title_number() {
             ((rename_errors++))
         fi
     done < <(find "${find_args[@]}" -print0 2>/dev/null)
+}
+
+_english_audio_args() {
+    # Echoes HandBrake `--audio <list>` args (in the named array) that restrict
+    # the encode to English audio tracks — but ONLY when the source carries more
+    # than one audio track. A single-track source is left untouched (so a lone
+    # foreign-language track is never dropped), as is a multi-track source that
+    # has no English-tagged stream (we keep the preset's default rather than
+    # risk producing a file with no audio).
+    # HandBrake numbers audio tracks 1-based in source order, so the position
+    # counter below — not the ffmpeg stream index — is what gets passed through.
+    # Usage: _english_audio_args <out_array> <input_file>
+    local -n _out=$1
+    local input_file="$2"
+    _out=()
+
+    local -a eng_positions=()
+    local pos=0 total=0 idx lang
+    while IFS=',' read -r idx lang; do
+        ((pos++)); ((total++))
+        case "${lang,,}" in
+            eng|en|english) eng_positions+=("$pos") ;;
+        esac
+    done < <(ffprobe -v quiet -select_streams a \
+        -show_entries stream=index:stream_tags=language \
+        -of csv=p=0 "$input_file" 2>/dev/null)
+
+    if (( total > 1 && ${#eng_positions[@]} > 0 )); then
+        local IFS=,
+        _out=(--audio "${eng_positions[*]}")
+    fi
 }
 
 _find_eng_subtitle_track() {
