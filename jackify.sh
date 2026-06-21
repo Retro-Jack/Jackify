@@ -521,35 +521,66 @@ rename_in_path() {
 }
 
 strip_source_tags() {
-    # Strips bracketed content, technical source tags (1080p, x264, encoder
-    # group names, …) and orphan separators from basenames. Bare four-digit
-    # years are wrapped in parentheses.
+    # Strips bracketed content, site/tracker URLs (www.* domains and bare
+    # tracker brands like YTS.MX / UIndex.org), technical source tags (1080p,
+    # x264, REMUX, Dual-Audio, encoder group names, …) and orphan separators
+    # from basenames. Bare four-digit years are wrapped in parentheses.
     # Usage: strip_source_tags <directory> [--recursive] [--dirs]
     local directory="$1"
     local recursive=false dirs_only=false
     shift 1
     _parse_find_opts recursive dirs_only "$@"
 
+    # $t is the master tag alternation, matched case-insensitively in /x mode
+    # (free-spacing) so each category sits on its own commented line.
     local perl_script='
-my $t = qr/2160p|1080p|720p|480p|4K|UHD|
+my $t = qr/
+    # resolutions
+    2160p|1080p|720p|480p|4K|UHD|
+    # disc sources and streaming services
     Blu-?Ray|BDRip|BRRip|WEB-DL|WEBRip|HDTV|DVDRip|DVDScr|AMZN|NF|HULU|DSNP|
+    # video codecs
     H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
-    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC|MP3|7\.1|5\.1|DDP5.1|
-    HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|900mb|
-    PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|IMAX|
+    # audio codecs and channel layouts
+    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC(?:\d+\.\d+)?|Opus(?:\d+\.\d+)?|MP3|7\.1|5\.1|DDP5.1|Dual-?Audio|
+    # HDR, bit-depth and remux markers
+    HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|900mb|REMUX|
+    # edition and re-release tags
+    PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|UNCUT|IMAX|
+    # release groups
     YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
+    # release groups (encoders)
     CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|GalaxyRG|x264|
+    # anime fansub groups
     HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|
+    # release groups
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|
-    NTG|FLUX|ION10|CAKES|PECULATE|
+    # release groups
+    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|
+    # release groups (legacy)
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
+# Drop [bracketed] segments wholesale.
 s/\s*\[[^\]]*\]//g;
+# Site/tracker URLs. A leading www. domain is always junk; the trailing
+# separator run — including the " - " scene folders insert after the URL —
+# is consumed with it. Deliberately NOT a generic *.tld strip: that would
+# eat real title words like "Escape.To.Witch.Mountain".
+s/\bwww\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+[\s._-]*//gi;
+# Bare tracker brand without the www. prefix (UIndex.org, YTS.MX, …).
+s/(?<![A-Za-z0-9])(?:UIndex|YTS|RARBG|EZTV|ETTV)\.[A-Za-z]{2,}\b[\s._-]*//gi;
+# Tag wrapped in (parentheses).
 s/\s*\(\s*$t\s*\)\s*//gi;
+# Tag standing alone on token boundaries.
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
+# Collapse separator runs left behind by the removals above.
 s/[.\-_]{2,}([^.])/$1 ? ".$1" : ""/ge;
+# Trim any trailing separators.
 s/[.\-_]+$//;
+# Wrap a bare 4-digit year in parentheses.
 s/(?<![\(\d])\b(19\d{2}|20\d{2})\b(?!\))/($1)/g;
+# Collapse runs of spaces.
 s/\s{2,}/ /g;
+# Trim leading and trailing whitespace.
 s/^\s+|\s+$//g;'
 
     _perl_rename_loop "Tag stripping" false "$perl_script" \

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.1 — 2026-06-21
+
+### Added
+- **URL / tracker stripping in `strip_source_tags`** — two new substitutions remove site junk from names: any leading `www.<domain>` and bare tracker brands (`UIndex.org`, `YTS.MX`, `RARBG.*`, `EZTV.*`, `ETTV.*`), along with the trailing separator run (e.g. the `   -   ` scene folders insert after the URL). Intentionally **not** a generic `*.tld` strip, which would eat real title words like `Escape.To.Witch.Mountain`.
+- **New source tags** — added `REMUX`, `UNCUT`, `Dual-Audio`/`Dual Audio`, the `Opus` audio codec (with optional `2.0`-style channel suffix), a channel-suffix form for `FLAC` (matching the existing `AAC` handling), and release groups `Headpatter`, `WR3CK`, and `OFT` to the tag list. Sourced from real filenames in the downloads folder.
+
+---
+
 ## v1.6.0 — 2026-06-21
 
 ### Added
