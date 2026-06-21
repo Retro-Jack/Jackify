@@ -393,13 +393,17 @@ process_video() {
         return
     fi
 
+    # Two leading blank lines separate this video's block from the previous
+    # one (applied to both the skip and convert paths so the spacing is
+    # uniform across the whole step).
     if [[ -f "$output_file" ]]; then
+        printf '\n\n'
         echo "[$current_num/$total_num] SKIPPING: $(basename "$input_file") (already converted)"
         ((videos_skipped++))
         return
     fi
 
-    echo
+    printf '\n\n'
     echo "$(basename "$input_file")"
 
     # When the source has more than one audio track, keep only English ones.
@@ -782,7 +786,7 @@ extract_subtitle() {
     [[ -z "$track_index" ]] && return 0
 
     echo
-    echo " English subtitles found in $(basename "$input_file") - extracting"
+    echo "English subtitles found in $(basename "$input_file") - extracting"
 
     local temp_srt
     temp_srt="$(mktemp --suffix=.srt)"
@@ -968,7 +972,6 @@ if [[ $total_videos -eq 0 ]]; then
     die "No videos found in staging folder. Nothing to do."
 else
     print_header "STEP 2: Converting $total_videos $([ "$total_videos" -eq 1 ] && echo video || echo videos) - Preset: $PRESET_NAME"
-    echo
     for ((i = 0; i < total_videos; i++)); do
         process_video "${video_list[$i]}" $((i + 1)) "$total_videos"
     done

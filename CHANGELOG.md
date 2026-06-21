@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.4 — 2026-06-21
+
+### Changed
+- **Step 2 spacing** — every video's output block is now separated from the previous one by two blank lines (applied uniformly to both converted and skipped videos), and the redundant blank line after the Step 2 header was removed so the first video lines up with the rest. The `English subtitles found in …` notice is now flush-left (the stray leading space from v1.6.3 is gone).
+
+---
+
 ## v1.6.3 — 2026-06-21
 
 ### Changed
