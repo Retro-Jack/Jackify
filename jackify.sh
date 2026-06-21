@@ -781,6 +781,8 @@ extract_subtitle() {
     [[ -z "$track_index" ]] && track_index=$(_find_eng_subtitle_track "$input_file")
     [[ -z "$track_index" ]] && return 0
 
+    echo "  English subtitles found in $(basename "$input_file") - extracting"
+
     local temp_srt
     temp_srt="$(mktemp --suffix=.srt)"
     if ! ffmpeg -nostdin -v quiet -y -i "$input_file" -map "0:$track_index" -c:s srt "$temp_srt" 2>/dev/null; then

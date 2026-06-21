@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.2 — 2026-06-21
+
+### Added
+- **Subtitle-extraction notice** — `extract_subtitle` now prints `English subtitles found in <filename> - extracting` once a usable English (or untagged-fallback) text track is located, so the terminal shows why an extraction pass is starting.
+
+---
+
 ## v1.6.1 — 2026-06-21
 
 ### Added
