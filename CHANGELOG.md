@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.3 — 2026-06-21
+
+### Changed
+- **Step 2 output layout** — the main conversion progress bar and its `[SUCCESS] Conversion complete` line are now indented four spaces to match the subtitle-burn block. The `English subtitles found in … - extracting` notice gets a blank line above it and sits at a single-space indent, so the conversion and subtitle phases read as two clearly separated blocks per video.
+
+---
+
 ## v1.6.2 — 2026-06-21
 
 ### Added

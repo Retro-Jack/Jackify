@@ -413,19 +413,19 @@ process_video() {
     # preset from a JSON file (HandBrake quirk).
     local hb_ok hb_log
     hb_log=$(mktemp)
-    printf '  [%s]   0%%' "$EMPTY_BAR"
+    printf '    [%s]   0%%' "$EMPTY_BAR"
     _current_output="$output_file"
     { "$HANDBRAKE_CLI" \
         -i "$input_file" \
         -o "$output_file" \
         --preset-import-file "$PRESET_FILE" \
         --preset "$PRESET_NAME" \
-        "${audio_args[@]}" </dev/null 2>&1; } | tee "$hb_log" | tr '\r' '\n' | show_progress "  "
+        "${audio_args[@]}" </dev/null 2>&1; } | tee "$hb_log" | tr '\r' '\n' | show_progress "    "
     hb_ok=${PIPESTATUS[0]}
 
     if [[ $hb_ok -eq 0 ]]; then
         _current_output=""
-        echo "[SUCCESS] Conversion complete"
+        echo "    [SUCCESS] Conversion complete"
         ((videos_converted++))
 
         local had_sibling_srt=false
@@ -781,7 +781,8 @@ extract_subtitle() {
     [[ -z "$track_index" ]] && track_index=$(_find_eng_subtitle_track "$input_file")
     [[ -z "$track_index" ]] && return 0
 
-    echo "  English subtitles found in $(basename "$input_file") - extracting"
+    echo
+    echo " English subtitles found in $(basename "$input_file") - extracting"
 
     local temp_srt
     temp_srt="$(mktemp --suffix=.srt)"
