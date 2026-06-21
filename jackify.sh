@@ -80,7 +80,10 @@ print_header() {
     local pad=$(( (width - ${#title}) / 2 ))
     local border
     border="$(printf '%*s' "$width" '' | tr ' ' '=')"
-    printf '\n%s\n%*s%s\n%s\n' "$border" "$pad" '' "$title" "$border"
+    # One blank line above the box, three below — the trailing gap is the
+    # single source of truth for header spacing, so callers must not add their
+    # own blank line after a header.
+    printf '\n%s\n%*s%s\n%s\n\n\n\n' "$border" "$pad" '' "$title" "$border"
 }
 
 pause_and_clear() {
@@ -393,17 +396,17 @@ process_video() {
         return
     fi
 
-    # Two leading blank lines separate this video's block from the previous
-    # one (applied to both the skip and convert paths so the spacing is
-    # uniform across the whole step).
+    # Two blank lines separate this video's block from the previous one. The
+    # first video is skipped — its block already sits under the three blank
+    # lines that follow the STEP 2 header.
+    (( current_num > 1 )) && printf '\n\n'
+
     if [[ -f "$output_file" ]]; then
-        printf '\n\n'
         echo "[$current_num/$total_num] SKIPPING: $(basename "$input_file") (already converted)"
         ((videos_skipped++))
         return
     fi
 
-    printf '\n\n'
     echo "$(basename "$input_file")"
 
     # When the source has more than one audio track, keep only English ones.
@@ -894,7 +897,6 @@ select_preset() {
 
 clear
 print_header "Jackify"
-echo
 echo "Checking prerequisites..."
 echo
 
@@ -1013,7 +1015,6 @@ pause_and_clear
 # ----- Final report ----------------------------------------------------------
 
 print_header "Processing Complete"
-echo
 printf 'Preset:                %s\n' "$PRESET_NAME"
 echo
 printf 'Videos found:          %d\n' "$total_videos"
@@ -1044,6 +1045,5 @@ if [[ "${answer,,}" == "y" ]]; then
 fi
 echo
 print_header "Done"
-echo
 read -r -s -n1 -p "Press any key to quit . . . "
 echo

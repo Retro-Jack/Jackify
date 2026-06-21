@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.5 — 2026-06-21
+
+### Changed
+- **Consolidated header spacing** — `print_header` now owns the gap below every banner, emitting three blank lines after the box. The per-call `echo`s that used to follow the intro, *Processing Complete*, and *Done* headers were removed, and Step 2's per-video separator now skips the first video so its block sits cleanly under the header. Every step header (intro, Steps 1–3, final report, Done) now has identical spacing.
+
+---
+
 ## v1.6.4 — 2026-06-21
 
 ### Changed
