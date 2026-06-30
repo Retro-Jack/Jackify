@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.7.0 — 2026-06-30
+
+### Added
+- **OOM safety guards around HandBrake.** A corrupt or partially-downloaded input could send HandBrake into an unbounded allocation loop — exhausting RAM and swap until the kernel OOM-killed the whole terminal session (observed: 22.2 GB RAM + 25.7 GB swap before the kill). Two layers now prevent that:
+  1. **Pre-flight integrity check** — `process_video` runs a fast `ffprobe` container probe and skips any file whose duration can't be read before HandBrake touches it (logged via `warn`, counted as a failure).
+  2. **Memory-capped, time-limited encodes** — both HandBrake passes (main + subtitle burn) now run inside a `systemd-run --user --scope` with `MemoryMax=$HANDBRAKE_MEM_MAX` (default 8G) and `MemorySwapMax=0`, under a `timeout` of `$HANDBRAKE_TIMEOUT` (default 4h). If an encode exceeds the cap or runs long, only that scope is killed; the script logs it as a normal HandBrake failure and continues. The integrity check catches the obvious bad files; the cap is the hard backstop for everything else (a valid header with a truncated payload can pass the probe but still balloon).
+
+  Both guards degrade gracefully where `systemd-run` / `timeout` / `ffprobe` aren't present. New `HANDBRAKE_MEM_MAX` and `HANDBRAKE_TIMEOUT` config knobs near the top of the script.
+
+---
+
 ## v1.6.5 — 2026-06-21
 
 ### Changed

@@ -35,6 +35,13 @@ PRESET_DIR="/mnt/applications/Linux Applications/_Handy Scripts/Jackify/Handbrak
 OUTPUT_FORMAT="mp4"
 PROCESS_DELAY=2
 
+# Each HandBrake encode runs inside a memory-capped systemd scope (when
+# available) and under a wall-clock timeout, so a corrupt/partial file that
+# makes HandBrake leak gets killed locally instead of OOM-ing the whole desktop
+# session. Both degrade gracefully if systemd-run / timeout aren't present.
+HANDBRAKE_MEM_MAX="8G"   # hard RAM ceiling for a single HandBrake encode
+HANDBRAKE_TIMEOUT="4h"   # wall-clock ceiling for a single HandBrake encode
+
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
 SUBTITLE_EXTENSIONS=(srt ass ssa vtt sub idx sup)
 EXCLUDED_BASENAMES=(sample preview)
@@ -409,6 +416,17 @@ process_video() {
 
     echo "$(basename "$input_file")"
 
+    # --- INTEGRITY CHECK SHIELD ---
+    # Fast container check to catch partial torrents/corrupted streams before HandBrake freezes the system.
+    local check_err
+    if ! check_err=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$input_file" 2>&1); then
+        warn "Skipping corrupted or incomplete file: $(basename "$input_file")" "ffprobe duration check failed:
+$check_err"
+        ((videos_failed++))
+        return
+    fi
+    # ------------------------------
+
     # When the source has more than one audio track, keep only English ones.
     # Empty array => leave the preset's audio selection alone (≤1 track, or no
     # English track present). Reused verbatim by the subtitle-burn pass below.
@@ -422,7 +440,7 @@ process_video() {
     hb_log=$(mktemp)
     printf '    [%s]   0%%' "$EMPTY_BAR"
     _current_output="$output_file"
-    { "$HANDBRAKE_CLI" \
+    { "${HB_GUARD[@]}" "$HANDBRAKE_CLI" \
         -i "$input_file" \
         -o "$output_file" \
         --preset-import-file "$PRESET_FILE" \
@@ -471,7 +489,7 @@ $sub_mv_err"
                 _current_output="$burned_file"
                 local burn_log
                 burn_log=$(mktemp)
-                { "$HANDBRAKE_CLI" \
+                { "${HB_GUARD[@]}" "$HANDBRAKE_CLI" \
                     -i "$input_file" \
                     -o "$burned_file" \
                     --preset-import-file "$PRESET_FILE" \
@@ -908,6 +926,24 @@ check_command ffprobe         "FFprobe"
 
 echo "[OK] Prerequisites met"
 echo
+
+# Build the HandBrake guard prefix: a memory-capped systemd scope + a wall-clock
+# timeout, each added only if its tool is actually available and working, so the
+# script still runs on a box without systemd/timeout (just without the cap).
+# MemorySwapMax=0 stops a runaway from thrashing tens of GB of swap before the
+# cgroup OOM-kills it — the kill stays inside the scope, the desktop survives.
+HB_GUARD=()
+if command -v systemd-run &>/dev/null && systemd-run --user --scope -q --collect true &>/dev/null; then
+    HB_GUARD=(systemd-run --user --scope -q --collect \
+        -p "MemoryMax=$HANDBRAKE_MEM_MAX" -p "MemorySwapMax=0")
+    echo "[OK] HandBrake capped at $HANDBRAKE_MEM_MAX RAM (systemd scope)"
+fi
+if command -v timeout &>/dev/null; then
+    HB_GUARD=(timeout -k 30s "$HANDBRAKE_TIMEOUT" "${HB_GUARD[@]}")
+    echo "[OK] HandBrake timeout: $HANDBRAKE_TIMEOUT per encode"
+fi
+echo
+
 select_preset
 echo
 
