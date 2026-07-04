@@ -572,14 +572,22 @@ my $t = qr/
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|900mb|REMUX|
     # edition and re-release tags
     PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|UNCUT|IMAX|
+    # descriptive metadata
+    TV[\s._-]?Mini-?Series|Mini-?Series/xi;
+# Release groups live in their own alternation, stripped ONLY from the end
+# of the stem (scene convention puts the group last). Several are common
+# English words — KILLERS, DON, LOL, FLEET, EMBER, BONE — and stripping
+# them anywhere eats real title words ("Killers Of The Flower Moon" lost
+# its first word before this split).
+my $g = qr/
     # release groups
     YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
     # release groups (encoders)
-    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|GalaxyRG|x264|
+    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|GalaxyRG|
     # anime fansub groups
     HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|
     # release groups
-    TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|
+    TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     # release groups
     NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|
     # release groups (legacy)
@@ -593,10 +601,17 @@ s/\s*\[[^\]]*\]//g;
 s/\bwww\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+[\s._-]*//gi;
 # Bare tracker brand without the www. prefix (UIndex.org, YTS.MX, …).
 s/(?<![A-Za-z0-9])(?:UIndex|YTS|RARBG|EZTV|ETTV)\.[A-Za-z]{2,}\b[\s._-]*//gi;
+# Trailing release group(s), before the technical tags go — the group is
+# only recognisable as junk while it is still at the very end. Repeat in
+# case separators reveal another one.
+1 while s/(?<![A-Za-z0-9])(?:$g)[\s._-]*$//i;
 # Tag wrapped in (parentheses).
 s/\s*\(\s*$t\s*\)\s*//gi;
 # Tag standing alone on token boundaries.
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
+# Second trailing-group pass: a group that sat before the technical tags
+# ("Movie.YIFY.1080p") only reaches the end once those tags are gone.
+1 while s/(?<![A-Za-z0-9])(?:$g)[\s._-]*$//i;
 # Collapse separator runs left behind by the removals above.
 s/[.\-_]{2,}([^.])/$1 ? ".$1" : ""/ge;
 # Trim any trailing separators.

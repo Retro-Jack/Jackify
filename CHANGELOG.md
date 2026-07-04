@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.7.1 — 2026-07-04
+
+### Fixed
+- **Release-group names no longer eat title words.** Group tags were stripped case-insensitively anywhere in the name, so titles containing a group word lost it — *Killers Of The Flower Moon* became *Of The Flower Moon* (likewise Don, LOL, Bone, Ember, Fleet…). Groups now live in their own alternation stripped only from the end of the stem (scene convention), in two passes — before the technical tags (group last) and after them (group ahead of the tags, e.g. `Movie.YIFY.1080p`). Technical tags (resolutions, codecs, sources…) still strip anywhere.
+
+### Added
+- **New tags from a downloads scan:** release group `MULVAcoded`; descriptive noise `TV Mini-Series` / `Mini-Series` (so `Cilla TV Mini-Series 2014 …` cleans to `Cilla (2014)`).
+
+---
+
 ## v1.7.0 — 2026-06-30
 
 ### Added
