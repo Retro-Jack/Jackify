@@ -276,6 +276,17 @@ do_rename() {
     fi
 }
 
+_dedupe_name() {
+    # Given a parent dir, a base stem, and an extension (with leading dot, or
+    # empty for a directory / extensionless name), echo a basename that does not
+    # already exist under the parent — appending (1), (2), … before the
+    # extension. Called after the plain name is found to be taken.
+    # Usage: _dedupe_name <parent> <stem> <ext>
+    local parent="$1" stem="$2" ext="$3" n=1
+    while [[ -e "$parent/${stem}(${n})${ext}" ]]; do n=$((n + 1)); done
+    printf '%s' "${stem}(${n})${ext}"
+}
+
 copy_file_to_input() {
     # Copies a single file from DOWNLOADS_DIR to STAGING_DIR, preserving its
     # relative path.
@@ -293,14 +304,9 @@ copy_file_to_input() {
     fi
 
     if [[ -f "$target_file" ]]; then
-        local stem ext n
+        local stem
         stem="$(basename "${target_file%.*}")"
-        ext="${target_file##*.}"
-        n=1
-        while [[ -f "$target_dir/${stem}(${n}).${ext}" ]]; do
-            n=$((n + 1))
-        done
-        target_file="$target_dir/${stem}(${n}).${ext}"
+        target_file="$target_dir/$(_dedupe_name "$target_dir" "$stem" ".${target_file##*.}")"
     fi
     echo "  Copying: $(basename "$source_file") -> $(basename "$target_file")"
     local cp_err
@@ -319,7 +325,7 @@ _flatten_move_one() {
     # Move one path into the staging root, adding a (1), (2), … suffix if the
     # name is already taken (as in copy_file_to_input) so nothing is clobbered.
     # Usage: _flatten_move_one <path>
-    local src="$1" base target stem ext n mv_err
+    local src="$1" base target stem ext mv_err
     base="$(basename "$src")"; target="$STAGING_DIR/$base"
     if [[ -e "$target" ]]; then
         if [[ "$base" == *.* && ! -d "$src" ]]; then
@@ -327,9 +333,7 @@ _flatten_move_one() {
         else
             stem="$base"; ext=""
         fi
-        n=1
-        while [[ -e "$STAGING_DIR/${stem}(${n})${ext}" ]]; do n=$((n + 1)); done
-        target="$STAGING_DIR/${stem}(${n})${ext}"
+        target="$STAGING_DIR/$(_dedupe_name "$STAGING_DIR" "$stem" "$ext")"
     fi
     echo "  Moving: $base"
     if ! mv_err=$(mv "$src" "$target" 2>&1); then
@@ -401,82 +405,6 @@ show_progress() {
         fi
     done
     printf '\r%s[%s] 100%%\n' "$indent" "$FULL_BAR"
-}
-
-_subtitle_belongs_to_stem() {
-    # Return 0 if subtitle basename <name> belongs to video stem <stem>: it is
-    # "<stem>.<ext>" or "<stem>.<lang>.<ext>" — a language-tagged sidecar such as
-    # video.en.srt / video.eng.srt / video.pt-BR.srt (YouTube & 4K Tube write
-    # these). The language tag is restricted to an ISO-code shape (2–3 letters,
-    # optional -/_ region) so an unrelated ".trailer.srt" etc. can't false-match.
-    # Usage: _subtitle_belongs_to_stem <name> <stem>
-    local base="${1%.*}" stem="$2"
-    [[ "$base" == "$stem" ]] && return 0
-    if [[ "$base" == "$stem".* ]]; then
-        local lang="${base#"$stem".}"
-        [[ "$lang" =~ ^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,4})?$ ]] && return 0
-    fi
-    return 1
-}
-
-_sidecar_subtitle_for() {
-    # Echo the basename of a subtitle in <input_file>'s own directory that
-    # belongs to it (matched by _subtitle_belongs_to_stem, so language-tagged
-    # sidecars count), or nothing. First match wins.
-    # Usage: _sidecar_subtitle_for <input_file>
-    local input_file="$1" dir stem sub sub_name
-    dir="$(dirname "$input_file")"
-    stem="$(basename "${input_file%.*}")"
-    while IFS= read -r -d '' sub; do
-        sub_name="$(basename "$sub")"
-        if _subtitle_belongs_to_stem "$sub_name" "$stem"; then
-            printf '%s' "$sub_name"
-            return 0
-        fi
-    done < <(find -L "$dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
-    return 1
-}
-
-_plan_output() {
-    # Decide output_dir + output_file for <input_file>, and cache embedded_track.
-    # Placement rules, in order:
-    #   1. lone TV episode (SxxExx)                 -> OUTPUT_DIR/<Show> - Season N/
-    #   2. movie/srt pair — a matching sidecar OR    -> OUTPUT_DIR/<media>/  (its OWN
-    #      an embedded English text track               folder; the .srt is moved in
-    #                                                    beside it, renamed to match)
-    #   3. lone plain video                         -> OUTPUT_DIR/  (flat)
-    #   4. video sharing a folder (e.g. a kept       -> preserve that relative folder
-    #      playlist), no subtitle                       under OUTPUT_DIR
-    # Assigns the caller's output_dir / output_file / embedded_track (bash
-    # dynamic scope — process_video declares them local before calling).
-    # Usage: _plan_output <input_file> <sibling_count>
-    local input_file="$1" sibling_count="$2" input_dir stem sub_here
-    input_dir="$(dirname "$input_file")"
-    stem="$(basename "${input_file%.*}")"
-
-    embedded_track=""
-    sub_here="$(_sidecar_subtitle_for "$input_file")"
-    [[ -z "$sub_here" ]] && embedded_track="$(_find_eng_subtitle_track "$input_file")"
-
-    local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
-    if [[ $sibling_count -eq 1 && "$stem" =~ $tv_pattern ]]; then
-        local show_raw="${BASH_REMATCH[1]}"
-        local season_num=$(( 10#${BASH_REMATCH[2]} ))
-        local show_name
-        show_name="$(printf '%s' "$show_raw" | perl -pe 's/[._]/ /g; s/\s{2,}/ /g; s/^\s+|\s+$//g')"
-        output_dir="$OUTPUT_DIR/$show_name - Season $season_num"
-        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
-    elif [[ -n "$sub_here" || -n "$embedded_track" ]]; then
-        output_dir="$OUTPUT_DIR/$stem"
-        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
-    elif [[ $sibling_count -eq 1 ]]; then
-        output_dir="$OUTPUT_DIR"
-        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
-    else
-        local relative_path="${input_file#"$STAGING_DIR"/}"
-        output_file="$OUTPUT_DIR/${relative_path%.*}.${OUTPUT_FORMAT}"
-        output_dir="$(dirname "$output_file")"
-    fi
 }
 
 process_video() {
@@ -813,7 +741,7 @@ remove_title_number() {
     local -a find_args
     _build_find_args find_args "$directory" "$recursive" "$dirs_only"
 
-    local item parent name ext target new_target new_name n mv_err
+    local item parent name ext target new_target new_name mv_err
     while IFS= read -r -d '' item; do
         parent="$(dirname "$item")"
         name="$(basename "$item")"
@@ -828,11 +756,7 @@ remove_title_number() {
         new_target="${BASH_REMATCH[2]}"
         new_name="${new_target}${ext:+.$ext}"
         if [[ -e "$parent/$new_name" && "$parent/$new_name" != "$item" ]]; then
-            n=1
-            while [[ -e "$parent/${new_target}(${n})${ext:+.$ext}" ]]; do
-                n=$((n + 1))
-            done
-            new_name="${new_target}(${n})${ext:+.$ext}"
+            new_name="$(_dedupe_name "$parent" "$new_target" "${ext:+.$ext}")"
         fi
         echo "  Renaming: $name -> $new_name"
         if ! mv_err=$(mv "$item" "$parent/$new_name" 2>&1); then
@@ -840,6 +764,82 @@ remove_title_number() {
             ((rename_errors++))
         fi
     done < <(find "${find_args[@]}" -print0 2>/dev/null)
+}
+
+_subtitle_belongs_to_stem() {
+    # Return 0 if subtitle basename <name> belongs to video stem <stem>: it is
+    # "<stem>.<ext>" or "<stem>.<lang>.<ext>" — a language-tagged sidecar such as
+    # video.en.srt / video.eng.srt / video.pt-BR.srt (YouTube & 4K Tube write
+    # these). The language tag is restricted to an ISO-code shape (2–3 letters,
+    # optional -/_ region) so an unrelated ".trailer.srt" etc. can't false-match.
+    # Usage: _subtitle_belongs_to_stem <name> <stem>
+    local base="${1%.*}" stem="$2"
+    [[ "$base" == "$stem" ]] && return 0
+    if [[ "$base" == "$stem".* ]]; then
+        local lang="${base#"$stem".}"
+        [[ "$lang" =~ ^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,4})?$ ]] && return 0
+    fi
+    return 1
+}
+
+_sidecar_subtitle_for() {
+    # Echo the basename of a subtitle in <input_file>'s own directory that
+    # belongs to it (matched by _subtitle_belongs_to_stem, so language-tagged
+    # sidecars count), or nothing. First match wins.
+    # Usage: _sidecar_subtitle_for <input_file>
+    local input_file="$1" dir stem sub sub_name
+    dir="$(dirname "$input_file")"
+    stem="$(basename "${input_file%.*}")"
+    while IFS= read -r -d '' sub; do
+        sub_name="$(basename "$sub")"
+        if _subtitle_belongs_to_stem "$sub_name" "$stem"; then
+            printf '%s' "$sub_name"
+            return 0
+        fi
+    done < <(find -L "$dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
+    return 1
+}
+
+_plan_output() {
+    # Decide output_dir + output_file for <input_file>, and cache embedded_track.
+    # Placement rules, in order:
+    #   1. lone TV episode (SxxExx)                 -> OUTPUT_DIR/<Show> - Season N/
+    #   2. movie/srt pair — a matching sidecar OR    -> OUTPUT_DIR/<media>/  (its OWN
+    #      an embedded English text track               folder; the .srt is moved in
+    #                                                    beside it, renamed to match)
+    #   3. lone plain video                         -> OUTPUT_DIR/  (flat)
+    #   4. video sharing a folder (e.g. a kept       -> preserve that relative folder
+    #      playlist), no subtitle                       under OUTPUT_DIR
+    # Assigns the caller's output_dir / output_file / embedded_track (bash
+    # dynamic scope — process_video declares them local before calling).
+    # Usage: _plan_output <input_file> <sibling_count>
+    local input_file="$1" sibling_count="$2" input_dir stem sub_here
+    input_dir="$(dirname "$input_file")"
+    stem="$(basename "${input_file%.*}")"
+
+    embedded_track=""
+    sub_here="$(_sidecar_subtitle_for "$input_file")"
+    [[ -z "$sub_here" ]] && embedded_track="$(_find_eng_subtitle_track "$input_file")"
+
+    local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
+    if [[ $sibling_count -eq 1 && "$stem" =~ $tv_pattern ]]; then
+        local show_raw="${BASH_REMATCH[1]}"
+        local season_num=$(( 10#${BASH_REMATCH[2]} ))
+        local show_name
+        show_name="$(printf '%s' "$show_raw" | perl -pe 's/[._]/ /g; s/\s{2,}/ /g; s/^\s+|\s+$//g')"
+        output_dir="$OUTPUT_DIR/$show_name - Season $season_num"
+        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
+    elif [[ -n "$sub_here" || -n "$embedded_track" ]]; then
+        output_dir="$OUTPUT_DIR/$stem"
+        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
+    elif [[ $sibling_count -eq 1 ]]; then
+        output_dir="$OUTPUT_DIR"
+        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
+    else
+        local relative_path="${input_file#"$STAGING_DIR"/}"
+        output_file="$OUTPUT_DIR/${relative_path%.*}.${OUTPUT_FORMAT}"
+        output_dir="$(dirname "$output_file")"
+    fi
 }
 
 _english_audio_args() {
