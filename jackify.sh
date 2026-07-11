@@ -315,6 +315,69 @@ target: $free_space"
     fi
 }
 
+_flatten_move_one() {
+    # Move one path into the staging root, adding a (1), (2), … suffix if the
+    # name is already taken (as in copy_file_to_input) so nothing is clobbered.
+    # Usage: _flatten_move_one <path>
+    local src="$1" base target stem ext n mv_err
+    base="$(basename "$src")"; target="$STAGING_DIR/$base"
+    if [[ -e "$target" ]]; then
+        if [[ "$base" == *.* && ! -d "$src" ]]; then
+            stem="${base%.*}"; ext=".${base##*.}"
+        else
+            stem="$base"; ext=""
+        fi
+        n=1
+        while [[ -e "$STAGING_DIR/${stem}(${n})${ext}" ]]; do n=$((n + 1)); done
+        target="$STAGING_DIR/${stem}(${n})${ext}"
+    fi
+    echo "  Moving: $base"
+    if ! mv_err=$(mv "$src" "$target" 2>&1); then
+        warn "4ktube move failed: $base" "$mv_err"
+    fi
+}
+
+flatten_4ktube_staging() {
+    # 4K Tube nests downloads at STAGING_DIR/4ktube/<category>/video/ — e.g.
+    # youtube/video/ for single grabs, playlist/video/ for playlists. For each
+    # such video/ folder (matched case-insensitively) the contents are lifted up
+    # to the staging root, then the whole 4ktube tree is removed — ALWAYS, even
+    # with nothing to move. Two modes, by category:
+    #   * playlist/ — KEEP the grouping: its <PlaylistName>/ subfolders move up
+    #     as-is, so Jackify mirrors that folder in the output.
+    #   * anything else (youtube, …) — FLATTEN: the video files themselves are
+    #     pulled out to the root, dropping the wrapper subfolders (whose names
+    #     are just batch timestamps like "Batch 2026-07-11 16-08-14").
+    # Silent no-op when there's no 4ktube folder. A staging-root name clash gets
+    # a (1), (2), … suffix so a move never clobbers an existing file.
+    # Usage: flatten_4ktube_staging
+    local tube_dir
+    tube_dir="$(find "$STAGING_DIR" -mindepth 1 -maxdepth 1 -type d -iname '4ktube' -print -quit 2>/dev/null)"
+    [[ -n "$tube_dir" ]] || return 0
+
+    local announced=false vid_dir category entry
+    while IFS= read -r -d '' vid_dir; do
+        category="$(basename "$(dirname "$vid_dir")")"
+        if [[ "${category,,}" == "playlist" ]]; then
+            # keep groupings: move each top-level entry (the playlist folders) as-is
+            while IFS= read -r -d '' entry; do
+                $announced || { echo "Flattening 4K Tube downloads into staging..."; announced=true; }
+                _flatten_move_one "$entry"
+            done < <(find "$vid_dir" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+        else
+            # flatten: pull the files out of any batch subfolders to the root
+            while IFS= read -r -d '' entry; do
+                $announced || { echo "Flattening 4K Tube downloads into staging..."; announced=true; }
+                _flatten_move_one "$entry"
+            done < <(find "$vid_dir" -mindepth 1 -type f -print0 2>/dev/null)
+        fi
+    done < <(find "$tube_dir" -mindepth 2 -maxdepth 2 -type d -iname 'video' -print0 2>/dev/null)
+
+    local rm_err
+    rm_err=$(rm -rf "$tube_dir" 2>&1) || warn "Could not remove 4ktube folder: $tube_dir" "$rm_err"
+    echo
+}
+
 _handbrake_log_tail() {
     # Returns the last 30 lines of a HandBrake stdout/stderr log with
     # progress noise filtered out: percent updates ("45.6 %") and the
@@ -340,20 +403,97 @@ show_progress() {
     printf '\r%s[%s] 100%%\n' "$indent" "$FULL_BAR"
 }
 
+_subtitle_belongs_to_stem() {
+    # Return 0 if subtitle basename <name> belongs to video stem <stem>: it is
+    # "<stem>.<ext>" or "<stem>.<lang>.<ext>" — a language-tagged sidecar such as
+    # video.en.srt / video.eng.srt / video.pt-BR.srt (YouTube & 4K Tube write
+    # these). The language tag is restricted to an ISO-code shape (2–3 letters,
+    # optional -/_ region) so an unrelated ".trailer.srt" etc. can't false-match.
+    # Usage: _subtitle_belongs_to_stem <name> <stem>
+    local base="${1%.*}" stem="$2"
+    [[ "$base" == "$stem" ]] && return 0
+    if [[ "$base" == "$stem".* ]]; then
+        local lang="${base#"$stem".}"
+        [[ "$lang" =~ ^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,4})?$ ]] && return 0
+    fi
+    return 1
+}
+
+_sidecar_subtitle_for() {
+    # Echo the basename of a subtitle in <input_file>'s own directory that
+    # belongs to it (matched by _subtitle_belongs_to_stem, so language-tagged
+    # sidecars count), or nothing. First match wins.
+    # Usage: _sidecar_subtitle_for <input_file>
+    local input_file="$1" dir stem sub sub_name
+    dir="$(dirname "$input_file")"
+    stem="$(basename "${input_file%.*}")"
+    while IFS= read -r -d '' sub; do
+        sub_name="$(basename "$sub")"
+        if _subtitle_belongs_to_stem "$sub_name" "$stem"; then
+            printf '%s' "$sub_name"
+            return 0
+        fi
+    done < <(find -L "$dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
+    return 1
+}
+
+_plan_output() {
+    # Decide output_dir + output_file for <input_file>, and cache embedded_track.
+    # Placement rules, in order:
+    #   1. lone TV episode (SxxExx)                 -> OUTPUT_DIR/<Show> - Season N/
+    #   2. movie/srt pair — a matching sidecar OR    -> OUTPUT_DIR/<media>/  (its OWN
+    #      an embedded English text track               folder; the .srt is moved in
+    #                                                    beside it, renamed to match)
+    #   3. lone plain video                         -> OUTPUT_DIR/  (flat)
+    #   4. video sharing a folder (e.g. a kept       -> preserve that relative folder
+    #      playlist), no subtitle                       under OUTPUT_DIR
+    # Assigns the caller's output_dir / output_file / embedded_track (bash
+    # dynamic scope — process_video declares them local before calling).
+    # Usage: _plan_output <input_file> <sibling_count>
+    local input_file="$1" sibling_count="$2" input_dir stem sub_here
+    input_dir="$(dirname "$input_file")"
+    stem="$(basename "${input_file%.*}")"
+
+    embedded_track=""
+    sub_here="$(_sidecar_subtitle_for "$input_file")"
+    [[ -z "$sub_here" ]] && embedded_track="$(_find_eng_subtitle_track "$input_file")"
+
+    local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
+    if [[ $sibling_count -eq 1 && "$stem" =~ $tv_pattern ]]; then
+        local show_raw="${BASH_REMATCH[1]}"
+        local season_num=$(( 10#${BASH_REMATCH[2]} ))
+        local show_name
+        show_name="$(printf '%s' "$show_raw" | perl -pe 's/[._]/ /g; s/\s{2,}/ /g; s/^\s+|\s+$//g')"
+        output_dir="$OUTPUT_DIR/$show_name - Season $season_num"
+        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
+    elif [[ -n "$sub_here" || -n "$embedded_track" ]]; then
+        output_dir="$OUTPUT_DIR/$stem"
+        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
+    elif [[ $sibling_count -eq 1 ]]; then
+        output_dir="$OUTPUT_DIR"
+        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
+    else
+        local relative_path="${input_file#"$STAGING_DIR"/}"
+        output_file="$OUTPUT_DIR/${relative_path%.*}.${OUTPUT_FORMAT}"
+        output_dir="$(dirname "$output_file")"
+    fi
+}
+
 process_video() {
     # Converts a single video with HandBrakeCLI; skips inputs whose target
-    # already exists. Output destination depends on context:
-    #   - Sibling videos in the same folder       -> preserve relative path under OUTPUT_DIR.
+    # already exists. Output destination is decided by _plan_output:
+    #   - movie/srt pair (matching sidecar OR embedded text track)
+    #                                             -> OUTPUT_DIR/<media>/ (its own
+    #                                                folder; the .srt is moved in
+    #                                                beside it, renamed to match).
     #   - Lone TV episode (SxxExx pattern)        -> OUTPUT_DIR/<Show> - Season <N>/.
-    #   - Lone video with a sibling subtitle OR
-    #     an embedded text-based subtitle track   -> OUTPUT_DIR/<source folder>/
-    #                                                (or OUTPUT_DIR/<stem>/ if at staging root)
-    #                                                so the .mp4, .srt, and burned-subs files stay grouped.
+    #   - Videos sharing a folder (kept playlist, …), no subtitle
+    #                                             -> preserve relative path under OUTPUT_DIR.
     #   - Otherwise                               -> OUTPUT_DIR/ (flat).
-    # On success: moves matching subtitle files from staging to output_dir,
-    # extracts any embedded eng/und text track directly into output_dir, and
-    # if a same-stem .srt is present there, runs a second HandBrake pass to
-    # produce "<stem> burned subs.mp4".
+    # On success: moves the matching subtitle (renamed to <stem>.<ext>) into
+    # output_dir, extracts any embedded eng/und text track there, and if a
+    # <stem>.srt is present runs a second HandBrake pass to produce
+    # "<stem> burned subs.mp4".
     # Usage: process_video <input> <current_index> <total>
     local input_file="$1"
     local current_num="$2"
@@ -368,33 +508,11 @@ process_video() {
     # Cached and reused later by extract_subtitle to avoid a second ffprobe call.
     local embedded_track=""
 
+    # Route the output: a movie/srt pair (matching sidecar, or an embedded text
+    # track) lands in its OWN folder named after the media file, with the .srt
+    # moved in beside it renamed to match. See _plan_output for the full rules.
     local output_file output_dir
-    if [[ $sibling_count -eq 1 ]]; then
-        local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
-        if [[ "$stem" =~ $tv_pattern ]]; then
-            local show_raw="${BASH_REMATCH[1]}"
-            local season_num=$(( 10#${BASH_REMATCH[2]} ))
-            local show_name
-            show_name="$(printf '%s' "$show_raw" | perl -pe 's/[._]/ /g; s/\s{2,}/ /g; s/^\s+|\s+$//g')"
-            output_dir="$OUTPUT_DIR/$show_name - Season $season_num"
-        else
-            local sub_count
-            sub_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) | wc -l)
-            [[ $sub_count -eq 0 ]] && embedded_track=$(_find_eng_subtitle_track "$input_file")
-            if [[ ($sub_count -gt 0 || -n "$embedded_track") && "$input_dir" != "$STAGING_DIR" ]]; then
-                output_dir="$OUTPUT_DIR/$(basename "$input_dir")"
-            elif [[ -n "$embedded_track" ]]; then
-                output_dir="$OUTPUT_DIR/$stem"
-            else
-                output_dir="$OUTPUT_DIR"
-            fi
-        fi
-        output_file="$output_dir/$stem.${OUTPUT_FORMAT}"
-    else
-        local relative_path="${input_file#"$STAGING_DIR"/}"
-        output_file="$OUTPUT_DIR/${relative_path%.*}.${OUTPUT_FORMAT}"
-        output_dir="$(dirname "$output_file")"
-    fi
+    _plan_output "$input_file" "$sibling_count"
 
     local out_mkdir_err
     if ! out_mkdir_err=$(mkdir -p "$output_dir" 2>&1); then
@@ -454,23 +572,30 @@ $check_err"
         ((videos_converted++))
 
         local had_sibling_srt=false
-        [[ -f "$input_dir/$stem.srt" ]] && had_sibling_srt=true
 
-        # Move sibling subtitles (any extension) from staging to output_dir
-        # before extraction, so the .srt that extract_subtitle compares against
-        # already lives at its final home and the burn pass reads from there.
+        # Move sibling subtitles from staging to output_dir before extraction, so
+        # the .srt that extract_subtitle compares against already lives at its
+        # final home and the burn pass reads from there. A sidecar may carry a
+        # language tag (YouTube / 4K Tube write video.en.srt, video.eng.srt,
+        # video.pt-BR.srt): those are matched too, and the destination name is
+        # normalised to <stem>.<ext> (tag dropped) so the extract / normalise /
+        # burn steps — which key on <stem>.srt — pick it up. If two sidecars
+        # would collapse to the same name (e.g. .en.srt + .es.srt), the first
+        # wins and the rest are left for staging cleanup.
+        local sub sub_name sub_ext sub_dest sub_mv_err
         while IFS= read -r -d '' sub; do
-            local sub_name
             sub_name="$(basename "$sub")"
-            if [[ "${sub_name%.*}" == "$stem" ]]; then
-                echo
-                echo "    Moving subtitles: $sub_name"
-                local sub_mv_err
-                if ! sub_mv_err=$(mv "$sub" "$output_dir/" 2>&1); then
-                    warn "Subtitle move failed: $sub_name" "src: $sub
-dst: $output_dir/
+            sub_ext="${sub_name##*.}"
+            _subtitle_belongs_to_stem "$sub_name" "$stem" || continue
+            sub_dest="$output_dir/$stem.$sub_ext"
+            [[ -e "$sub_dest" && "$sub" != "$sub_dest" ]] && continue
+            echo
+            echo "    Moving subtitles: $sub_name"
+            [[ "${sub_ext,,}" == "srt" ]] && had_sibling_srt=true
+            if ! sub_mv_err=$(mv "$sub" "$sub_dest" 2>&1); then
+                warn "Subtitle move failed: $sub_name" "src: $sub
+dst: $sub_dest
 $sub_mv_err"
-                fi
             fi
         done < <(find -L "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
 
@@ -612,12 +737,29 @@ s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
 # Second trailing-group pass: a group that sat before the technical tags
 # ("Movie.YIFY.1080p") only reaches the end once those tags are gone.
 1 while s/(?<![A-Za-z0-9])(?:$g)[\s._-]*$//i;
+# 4K Tube appends a "video <resolution> <language>" descriptor before the file
+# extension (e.g. "video 2160p60 english", "video 1080p uk", "video 2160p
+# original"). Strip that whole trailing block (each part after "video" optional),
+# keeping any extension. The literal "video" marker is REQUIRED, so a real title
+# that merely ends in a region/language word — say "The Office US", or a title
+# ending in the word English — is never touched.
+1 while s/[\s._-]+video(?:[\s._-]+(?:2160|1440|1080|720|576|480|360)p\d{0,3})?(?:[\s._-]+(?:english|eng|en|original|orig|uk|gb|us))?(?=[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
+# Resolution with a frame-rate suffix (2160p60, 1080p60) that the plain
+# 2160p/1080p tags above miss (their word boundary is defeated by the fps digits).
+s/(?<![A-Za-z0-9])(?:2160|1440|1080|720|576|480|360)p\d{2,3}(?![A-Za-z0-9])//gi;
 # Collapse separator runs left behind by the removals above.
 s/[.\-_]{2,}([^.])/$1 ? ".$1" : ""/ge;
 # Trim any trailing separators.
 s/[.\-_]+$//;
-# Wrap a bare 4-digit year in parentheses.
-s/(?<![\(\d])\b(19\d{2}|20\d{2})\b(?!\))/($1)/g;
+# Drop any separator/space left immediately before a file extension (a tag
+# stripped from the very end leaves "Name .mkv"); keep the extension.
+s/[\s._-]+(\.[A-Za-z0-9]{1,4})$/$1/;
+# Wrap a bare 4-digit release year in parentheses — but leave title-embedded
+# years alone: a FUTURE year (Cyberpunk 2077, Blade Runner 2049) cannot be a
+# release date, and a possessive year (2026 followed by apostrophe-s, as in a
+# video title) is part of the title, not a release stamp. \x{27}/\x{2019} are the
+# straight/curly apostrophes (a literal one would close this single-quoted block).
+s{(?<![\(\d])\b(19\d{2}|20\d{2})\b(?![\x{27}\x{2019}])(?!\))}{$1 <= 1900 + (localtime())[5] ? "($1)" : $1}ge;
 # Collapse runs of spaces.
 s/\s{2,}/ /g;
 # Trim leading and trailing whitespace.
@@ -968,6 +1110,10 @@ echo
 
 mkdir -p "$STAGING_DIR"  || die "Could not create staging directory: $STAGING_DIR"
 mkdir -p "$OUTPUT_DIR"   || die "Could not create output directory: $OUTPUT_DIR"
+
+# Flatten any 4K Tube YouTube downloads nested in staging up to the staging root
+# (and delete the 4ktube folder) before the copy/convert scans below see them.
+flatten_4ktube_staging
 
 # ----- Step 1: Copy from downloads -------------------------------------------
 
