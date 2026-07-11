@@ -670,8 +670,10 @@ s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
 # original"). Strip that whole trailing block (each part after "video" optional),
 # keeping any extension. The literal "video" marker is REQUIRED, so a real title
 # that merely ends in a region/language word — say "The Office US", or a title
-# ending in the word English — is never touched.
-1 while s/[\s._-]+video(?:[\s._-]+(?:2160|1440|1080|720|576|480|360)p\d{0,3})?(?:[\s._-]+(?:english|eng|en|original|orig|uk|gb|us))?(?=[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
+# ending in the word English — is never touched. A trailing " burned subs" tag
+# (present on the burned-in copy) is allowed before the end, so that copy strips
+# the same as the plain output.
+1 while s/[\s._-]+video(?:[\s._-]+(?:2160|1440|1080|720|576|480|360)p\d{0,3})?(?:[\s._-]+(?:english|eng|en|original|orig|uk|gb|us))?(?=(?:[\s._-]+burned[\s._-]+subs)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 # Resolution with a frame-rate suffix (2160p60, 1080p60) that the plain
 # 2160p/1080p tags above miss (their word boundary is defeated by the fps digits).
 s/(?<![A-Za-z0-9])(?:2160|1440|1080|720|576|480|360)p\d{2,3}(?![A-Za-z0-9])//gi;

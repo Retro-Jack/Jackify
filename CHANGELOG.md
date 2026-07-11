@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## v1.8.1 — 2026-07-11
+
+### Fixed
+- **Burned-in subtitle copies get their names cleaned like the original.** A `<name> burned subs.mp4` produced for a 4K Tube video kept its `video <resolution> <language>` tag (e.g. `… Video English burned subs.mp4`) because the tag stripper is anchored to the end of the name and the ` burned subs` suffix sat between the tag and the extension. The stripper now tolerates a trailing ` burned subs`, so the burned copy strips identically to the plain output.
 
 ### Changed
 - **Internal cleanup (no behaviour change).** The `(n)` collision-suffix naming (used when a target name is already taken) is now a single shared `_dedupe_name` helper instead of being open-coded in `copy_file_to_input`, `_flatten_move_one` and `remove_title_number`. The subtitle-matching and output-routing helpers (`_subtitle_belongs_to_stem`, `_sidecar_subtitle_for`, `_plan_output`) were moved to sit with the other subtitle helpers rather than being split across `process_video`.
