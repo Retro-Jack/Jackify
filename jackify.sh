@@ -638,11 +638,11 @@ my $g = qr/
     # release groups (encoders)
     CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|GalaxyRG|
     # anime fansub groups
-    HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|
+    HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|Varyg|
     # release groups
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     # release groups
-    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|
+    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|
     # release groups (legacy)
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
 # Drop [bracketed] segments wholesale.
@@ -654,17 +654,19 @@ s/\s*\[[^\]]*\]//g;
 s/\bwww\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+[\s._-]*//gi;
 # Bare tracker brand without the www. prefix (UIndex.org, YTS.MX, …).
 s/(?<![A-Za-z0-9])(?:UIndex|YTS|RARBG|EZTV|ETTV)\.[A-Za-z]{2,}\b[\s._-]*//gi;
-# Trailing release group(s), before the technical tags go — the group is
-# only recognisable as junk while it is still at the very end. Repeat in
-# case separators reveal another one.
-1 while s/(?<![A-Za-z0-9])(?:$g)[\s._-]*$//i;
+# Trailing release group(s), before the technical tags go — the group is only
+# recognisable as junk while it is at the end (allowing for the file extension
+# and a " burned subs" tag; on directories there is no extension). The end
+# anchor tolerates both so a bare group strips off files, not just folders.
+# Repeat in case removing one reveals another.
+1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 # Tag wrapped in (parentheses).
 s/\s*\(\s*$t\s*\)\s*//gi;
 # Tag standing alone on token boundaries.
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
 # Second trailing-group pass: a group that sat before the technical tags
 # ("Movie.YIFY.1080p") only reaches the end once those tags are gone.
-1 while s/(?<![A-Za-z0-9])(?:$g)[\s._-]*$//i;
+1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 # 4K Tube appends a "video <resolution> <language>" descriptor before the file
 # extension (e.g. "video 2160p60 english", "video 1080p uk", "video 2160p
 # original"). Strip that whole trailing block (each part after "video" optional),

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.8.2 — 2026-07-13
+
+### Fixed
+- **Release-group tags now strip off files, not just folders.** v1.7.1 made release-group stripping *trailing-only* (to stop it eating title words), anchored to the end of the name — but name-cleaning runs on the whole filename *including the extension*, so on a file like `Movie.2008.1080p.x264.Deceit.YIFY.mp4` the `.mp4` sat after the group and defeated the anchor, leaving `…Deceit.YIFY.mp4`. Folders (no extension) cleaned fine, files didn't. Both trailing-group passes now tolerate a trailing extension (and a ` burned subs` tag), so bare release groups strip off files too. Bonus: a standalone title that happens to match a group name (a film literally called `Deceit`, or `Deceit (2004)`) is now safe, since a group must be preceded by a separator.
+
+### Added
+- **New release groups:** `Deceit` (seen chained before YIFY on Brrip rips) and `Varyg` (anime).
+
+---
+
 ## v1.8.1 — 2026-07-11
 
 ### Fixed
