@@ -4,7 +4,7 @@
 # =============================================================================
 # Copies videos from DOWNLOADS_DIR to STAGING_DIR, converts them with
 # HandBrakeCLI using a preset chosen interactively from PRESET_DIR/*.json,
-# and writes cleaned-up output to OUTPUT_DIR.
+# and writes cleaned-up output to a per-profile folder, OUTPUT_DIR/<preset name>.
 #
 # Pipeline:
 #   1. Copy: DOWNLOADS_DIR -> STAGING_DIR (skipped if downloads is empty)
@@ -28,7 +28,7 @@ set -uo pipefail
 
 DOWNLOADS_DIR="/mnt/misc/Downloads/_Torrents/Finished/Files"
 STAGING_DIR="/mnt/multimedia/Conversion/Handbrake/1) Staging"
-OUTPUT_DIR="/mnt/multimedia/Conversion/Handbrake/2) Done"
+OUTPUT_DIR="/mnt/multimedia/Conversion/Handbrake/2) Done"   # root; a per-preset subfolder is appended once a profile is chosen
 HANDBRAKE_CLI="/usr/bin/HandBrakeCLI"
 PRESET_DIR="/mnt/applications/Linux Applications/_Handy Scripts/Jackify/Handbrake Presets"
 
@@ -1111,6 +1111,13 @@ echo
 check_file "$PRESET_FILE" "HandBrake preset file"
 echo "[OK] Preset: $PRESET_NAME"
 echo
+
+# Each profile keeps its own output folder under the Done root, named after the
+# chosen preset ("Jack 1080", "Loren 720", ...), so one person's conversions —
+# and the rename passes that follow them — never touch another's files.
+# ERROR_LOG was derived from the root before this re-point, so every profile
+# shares the single error log up there.
+OUTPUT_DIR="$OUTPUT_DIR/$PRESET_NAME"
 
 mkdir -p "$STAGING_DIR"  || die "Could not create staging directory: $STAGING_DIR"
 mkdir -p "$OUTPUT_DIR"   || die "Could not create output directory: $OUTPUT_DIR"

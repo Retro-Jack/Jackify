@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.0 — 2026-07-22
+
+### Added
+- **Each profile now gets its own output folder.** Conversions land in `2) Done/<preset name>/` — `Jack 1080` and `Loren 720` each keep their own tree — instead of everything sharing the one `2) Done` root. The subfolder is created automatically after the preset menu, and all the downstream behaviour (movie/srt own-folder placement, `Show - Season N` folders, subtitle extraction and the rename passes) happens inside it. A side benefit: the name-cleaning passes now only ever touch the current profile's files, so one person's run can no longer re-rename output a previous run left for the other. The error log stays shared at the `2) Done` root, one log for all profiles.
+
+---
+
 ## v1.8.2 — 2026-07-13
 
 ### Fixed
