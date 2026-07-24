@@ -16,7 +16,7 @@ Edit the variables at the top of `jackify.sh` to match your environment:
 |---|---|
 | `DOWNLOADS_DIR` | Your downloads folder |
 | `STAGING_DIR` | Staging folder for videos awaiting conversion |
-| `OUTPUT_DIR` | Where converted videos are written |
+| `OUTPUT_DIR` | Root for converted videos; each run writes to a `<preset name>` subfolder inside it |
 | `HANDBRAKE_CLI` | Path to the HandBrakeCLI binary |
 | `PRESET_DIR` | Folder containing HandBrake preset JSON files |
 | `OUTPUT_FORMAT` | Output container format (default: `mp4`) |
@@ -37,7 +37,7 @@ Run with no arguments. On startup, Jackify scans `PRESET_DIR` for HandBrake pres
 
 1. **Copy** — Videos and subtitle files are copied from `DOWNLOADS_DIR` to `STAGING_DIR`, preserving folder structure. If a file with the same name already exists in staging it is written as `name(1).ext`, `name(2).ext`, etc. Files whose base name matches `EXCLUDED_BASENAMES` (e.g. `sample.mkv`) are ignored at every stage. If `DOWNLOADS_DIR` is empty, this step is skipped and existing files in `STAGING_DIR` are used. If both folders contain files, you are prompted whether to copy before proceeding.
 
-2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. A progress bar is shown for each job; already-converted files are skipped.
+2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. Output goes to a per-profile folder, `OUTPUT_DIR/<preset name>/` (e.g. `2) Done/Jack 1080/`), so each profile keeps its own tree. A progress bar is shown for each job; already-converted files are skipped.
 
    - **Output placement** — if a video is the only media file in its directory, the output is placed directly in `OUTPUT_DIR` (or in a `Show Name - Season N` subfolder for TV episodes). If sibling files are present, the relative path from `STAGING_DIR` is preserved.
    - **Subtitle extraction** — after conversion, Jackify inspects the original source file for an English, non-hearing-impaired, text-based subtitle track. If one is found with at least `SRT_MIN_CUES` cues, it is extracted as a `.srt` alongside the source. If a `.srt` already exists, the extracted version takes precedence — unless the size difference exceeds `SRT_SIZE_THRESHOLD`%, in which case the larger file is used.
@@ -48,7 +48,7 @@ Run with no arguments. On startup, Jackify scans `PRESET_DIR` for HandBrake pres
 
 4. **Staging cleanup** — After the final report, you are prompted whether to delete the contents of `STAGING_DIR`.
 
-Warnings and errors are logged to `error_log.txt` in `OUTPUT_DIR` (only created if something goes wrong).
+Warnings and errors are logged to `error_log.txt` in the `OUTPUT_DIR` root — one shared log across profiles, only created if something goes wrong.
 
 ## Presets
 
