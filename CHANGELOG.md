@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.10.0 — 2026-07-28
+
+### Added
+- **All text and PGS subtitles can now be burned in, not just SRT.** The "burned subs" pass used to fire only when a `.srt` was present. It now also burns styled-text sidecars (`.ass`, `.ssa`, `.vtt`) and PGS picture subs (`.sup`). SRT keeps its direct `--srt-file` path; the others are muxed into a temporary MKV as the sole subtitle track (video and audio stream-copied) and burned from there with the chosen preset — so ASS/SSA styling is preserved through libass, and PGS bitmaps are burned as-is. When several subtitles are present for a video, the burn prefers SRT, then ASS/SSA, then VTT, then SUP. VobSub (`.idx`/`.sub`) still travels alongside the video as a sidecar but is not burned. No new dependency — ffmpeg was already required for subtitle extraction.
+
+---
+
 ## v1.9.0 — 2026-07-22
 
 ### Added

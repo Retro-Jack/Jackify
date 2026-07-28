@@ -10,15 +10,16 @@
 #   1. Copy: DOWNLOADS_DIR -> STAGING_DIR (skipped if downloads is empty)
 #   2. Convert: HandBrakeCLI on each video; sibling subtitles are moved from
 #      staging to OUTPUT_DIR and embedded eng/und text tracks are extracted
-#      directly into OUTPUT_DIR. If a same-stem .srt ends up there, a second
-#      HandBrake pass burns it into a " burned subs" copy.
+#      directly into OUTPUT_DIR. If a same-stem subtitle ends up there, a second
+#      HandBrake pass burns it into a " burned subs" copy — SRT direct, and
+#      styled text (ASS/SSA/VTT) or picture subs (PGS) muxed in first.
 #   3. Clean names: strip tags/encoder groups, wrap years in parens, normalise
 #      separators, apply title case (with apostrophe + acronym handling)
 #
 # Errors are written lazily to OUTPUT_DIR/error_log.txt; the terminal only
 # sees a "[WARN] See <log>" pointer. The log is not created on clean runs.
 #
-# Requires: HandBrakeCLI, perl. Other tools (find, sed, awk, mv, cp) are
+# Requires: HandBrakeCLI, ffmpeg, perl. Other tools (find, sed, awk, mv, cp) are
 # standard on any Linux system.
 # =============================================================================
 
@@ -75,8 +76,10 @@ rename_errors=0
 _last_extract_wrote=false
 
 # Set by process_video while HandBrake is running; the EXIT trap removes the
-# partial output file if the script is interrupted mid-conversion.
+# partial output file if the script is interrupted mid-conversion. _current_tmp
+# is the temp MKV used to burn a muxed subtitle, cleared the same way.
 _current_output=""
+_current_tmp=""
 
 # ----- Functions -------------------------------------------------------------
 
@@ -157,6 +160,7 @@ warn() {
 
 _on_exit() {
     [[ -n "$_current_output" && -f "$_current_output" ]] && rm -f "$_current_output"
+    [[ -n "$_current_tmp"    && -f "$_current_tmp"    ]] && rm -f "$_current_tmp"
 }
 trap '_on_exit' EXIT
 
@@ -530,28 +534,85 @@ $sub_mv_err"
         extract_subtitle "$input_file" "$output_dir/$stem.srt" "$embedded_track"
         $had_sibling_srt && ((subs_found++))
 
+        # Pick the subtitle to burn: prefer the SRT (burned directly via
+        # HandBrake's --srt-file), otherwise the best styled-text or picture
+        # sidecar. HandBrake can only burn a non-SRT sub if it lives inside the
+        # source, so those are muxed into a temp MKV as the sole subtitle track
+        # first. VobSub (.idx/.sub) is intentionally not burned -- it still
+        # travels alongside the video as a sidecar.
         local srt_path="$output_dir/$stem.srt"
+        local burn_sub="" burn_kind=""
         if [[ -f "$srt_path" ]]; then
             _normalise_srt "$srt_path"
+            burn_sub="$srt_path"; burn_kind="srt"
+        else
+            local _bext
+            for _bext in ass ssa vtt sup; do
+                if [[ -f "$output_dir/$stem.$_bext" ]]; then
+                    burn_sub="$output_dir/$stem.$_bext"; burn_kind="mux"; break
+                fi
+            done
+        fi
+
+        if [[ -n "$burn_sub" ]]; then
             local burned_file="$output_dir/$stem burned subs.${OUTPUT_FORMAT}"
             if [[ -f "$burned_file" ]]; then
                 echo "  [BURNED SUBS] Already exists, skipping"
             else
-                echo "    Burning subtitles: $(basename "$srt_path")"
+                echo "    Burning subtitles: $(basename "$burn_sub")"
                 printf '    [%s]   0%%' "$EMPTY_BAR"
                 _current_output="$burned_file"
-                local burn_log
+                local burn_log burn_ok burn_src="$input_file"
                 burn_log=$(mktemp)
-                { "${HB_GUARD[@]}" "$HANDBRAKE_CLI" \
-                    -i "$input_file" \
-                    -o "$burned_file" \
-                    --preset-import-file "$PRESET_FILE" \
-                    --preset "$PRESET_NAME" \
-                    "${audio_args[@]}" \
-                    --srt-file "$srt_path" \
-                    --srt-codeset UTF-8 \
-                    --srt-burn 1 </dev/null 2>&1; } | tee "$burn_log" | tr '\r' '\n' | show_progress "    "
-                local burn_ok=${PIPESTATUS[0]}
+
+                if [[ "$burn_kind" == "mux" ]]; then
+                    # Styled text (ASS/SSA/VTT, rendered by libass) and picture
+                    # subs (PGS) can only be burned from inside the container, so
+                    # mux the sidecar in as the sole subtitle track (video and
+                    # audio stream-copied) and let HandBrake burn that track. The temp
+                    # MKV sits beside the output so it lands on the large volume,
+                    # and _current_tmp lets the EXIT trap clear it on interrupt.
+                    _current_tmp=$(mktemp --tmpdir="$output_dir" --suffix=.mkv)
+                    # Text subs (ASS/SSA/VTT) are transcoded to ASS so HandBrake
+                    # renders them via libass -- a copied WebVTT track burns
+                    # blank. Picture subs (PGS) are stream-copied as-is.
+                    local _scodec="ass"
+                    [[ "${burn_sub##*.}" == "sup" ]] && _scodec="copy"
+                    if ffmpeg -nostdin -v error -y -i "$input_file" -i "$burn_sub" \
+                            -map 0:v -map 0:a? -map 1 -c:v copy -c:a copy -c:s "$_scodec" "$_current_tmp" >"$burn_log" 2>&1; then
+                        burn_src="$_current_tmp"
+                    else
+                        burn_src=""   # mux failed; skip the burn, keep the log
+                    fi
+                fi
+
+                if [[ -z "$burn_src" ]]; then
+                    burn_ok=1
+                elif [[ "$burn_kind" == "srt" ]]; then
+                    { "${HB_GUARD[@]}" "$HANDBRAKE_CLI" \
+                        -i "$burn_src" \
+                        -o "$burned_file" \
+                        --preset-import-file "$PRESET_FILE" \
+                        --preset "$PRESET_NAME" \
+                        "${audio_args[@]}" \
+                        --srt-file "$burn_sub" \
+                        --srt-codeset UTF-8 \
+                        --srt-burn 1 </dev/null 2>&1; } | tee "$burn_log" | tr '\r' '\n' | show_progress "    "
+                    burn_ok=${PIPESTATUS[0]}
+                else
+                    { "${HB_GUARD[@]}" "$HANDBRAKE_CLI" \
+                        -i "$burn_src" \
+                        -o "$burned_file" \
+                        --preset-import-file "$PRESET_FILE" \
+                        --preset "$PRESET_NAME" \
+                        "${audio_args[@]}" \
+                        --subtitle 1 \
+                        --subtitle-burned=1 </dev/null 2>&1; } | tee -a "$burn_log" | tr '\r' '\n' | show_progress "    "
+                    burn_ok=${PIPESTATUS[0]}
+                fi
+
+                [[ -n "$_current_tmp" ]] && { rm -f "$_current_tmp"; _current_tmp=""; }
+
                 if [[ $burn_ok -eq 0 ]]; then
                     _current_output=""
                     echo "    [SUCCESS] Burned subs complete"
@@ -565,7 +626,7 @@ $sub_mv_err"
                     rm -f "$burned_file"
                     local burn_details
                     burn_details=$(_handbrake_log_tail "$burn_log")
-                    warn "Subtitle burn failed on: $(basename "$input_file") (exit $burn_ok, srt: $(basename "$srt_path"))" "$burn_details"
+                    warn "Subtitle burn failed on: $(basename "$input_file") (exit $burn_ok, sub: $(basename "$burn_sub"))" "$burn_details"
                 fi
                 rm -f "$burn_log"
             fi
