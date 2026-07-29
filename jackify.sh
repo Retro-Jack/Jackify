@@ -697,7 +697,7 @@ my $g = qr/
     # release groups
     YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
     # release groups (encoders)
-    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|GalaxyRG|
+    CtrlHD|DON|EbP|NTb|Tigole|QxR|UTR|HiDt|HDMaNiAcS|10bit-GalaxyRG265|GalaxyRG|GalaxyTV|
     # anime fansub groups
     HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|Varyg|
     # release groups
@@ -725,6 +725,9 @@ s/(?<![A-Za-z0-9])(?:UIndex|YTS|RARBG|EZTV|ETTV)\.[A-Za-z]{2,}\b[\s._-]*//gi;
 s/\s*\(\s*$t\s*\)\s*//gi;
 # Tag standing alone on token boundaries.
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
+# Dubbing tags: bare "Dubbed", and "<language> Dubbed" as a unit (the language
+# is only dropped when Dubbed follows it, so real title words survive).
+s/(?<![a-zA-Z0-9])(?:(?:Hindi|Tamil|Telugu|Malayalam|Kannada|Bengali|Marathi|Punjabi|Gujarati|Urdu|Bhojpuri|English|Korean|Japanese|Mandarin|Cantonese|Chinese|Spanish|French|German|Italian|Russian|Arabic|Turkish|Thai|Vietnamese|Indonesian|Portuguese|Dual[\s._-]?Audio)[\s._-]+)?Dubbed(?![a-zA-Z0-9])//gi;
 # Second trailing-group pass: a group that sat before the technical tags
 # ("Movie.YIFY.1080p") only reaches the end once those tags are gone.
 1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;

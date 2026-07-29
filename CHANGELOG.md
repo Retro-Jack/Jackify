@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.10.1 — 2026-07-29
+
+### Added
+- **Two more junk tags stripped from names: `GalaxyTV` and `Dubbed`.** `GalaxyTV` joins the release-group list (removed only from the end of the name, like the other groups). `Dubbed` is stripped wherever it stands as its own word — both on its own and together with a leading language (`Hindi Dubbed 1080p` → clean, `Dual Audio Dubbed` → gone). The language is only dropped when `Dubbed` follows it, so real title words survive (`The French Connection` keeps its `French`).
+
+  Verified against sample names:
+
+  ```
+  Movie Dubbed 720p                                → Movie
+  Some Movie 2024 Hindi Dubbed 1080p WEB x264-GalaxyTV → Some Movie 2024
+  Another 2022 Dual Audio Dubbed                   → Another 2022
+  Tamil Dubbed Movie 2024                          → Movie 2024
+  The French Connection 1971                       → unchanged (French kept)
+  ```
+
+---
+
 ## v1.10.0 — 2026-07-28
 
 ### Added
