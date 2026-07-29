@@ -465,8 +465,22 @@ process_video() {
     local sibling_count
     sibling_count=$(find -L "$input_dir" -maxdepth 1 -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) | wc -l)
 
-    # Cached and reused later by extract_subtitle to avoid a second ffprobe call.
-    local embedded_track=""
+    # Subtitle presence (a matching sidecar, or an embedded eng/und text track);
+    # embedded_track is cached for extract_subtitle. Computed here — not in
+    # _plan_output — so the audio analysis below can skip its foreign-language
+    # probe when a subtitle already exists.
+    local sub_here="" embedded_track=""
+    sub_here="$(_sidecar_subtitle_for "$input_file")"
+    [[ -z "$sub_here" ]] && embedded_track="$(_find_eng_subtitle_track "$input_file")"
+
+    # Analyse audio up front: English-track restriction for the encode, plus
+    # whether any English audio exists and (if not) the source language — so a
+    # foreign-only source with no subtitle is named "<title> - <lang> audio
+    # only". Done before _plan_output so that name is set for the skip-check.
+    local -a audio_args=()
+    local audio_has_eng=1 audio_lang=""
+    local _want_lang=true; [[ -n "$sub_here" || -n "$embedded_track" ]] && _want_lang=false
+    _analyse_audio audio_args "$input_file" "$_want_lang"
 
     # Route the output: a movie/srt pair (matching sidecar, or an embedded text
     # track) lands in its OWN folder named after the media file, with the .srt
@@ -505,12 +519,10 @@ $check_err"
     fi
     # ------------------------------
 
-    # When the source has more than one audio track, keep only English ones.
-    # Empty array => leave the preset's audio selection alone (≤1 track, or no
-    # English track present). Reused verbatim by the subtitle-burn pass below.
-    local -a audio_args
-    _english_audio_args audio_args "$input_file"
+    # audio_args (English-track restriction) and audio_has_eng / audio_lang were
+    # set by _analyse_audio near the top; audio_args is reused by the burn pass.
     [[ ${#audio_args[@]} -gt 0 ]] && echo "  Audio: multiple tracks — keeping English only (${audio_args[1]})"
+    [[ $audio_has_eng -eq 0 ]] && echo "  Audio: no English track — output tagged \"$audio_lang audio only\""
 
     # --preset-import-file + --preset are both required to select a named
     # preset from a JSON file (HandBrake quirk).
@@ -909,13 +921,17 @@ _plan_output() {
     # Assigns the caller's output_dir / output_file / embedded_track (bash
     # dynamic scope — process_video declares them local before calling).
     # Usage: _plan_output <input_file> <sibling_count>
-    local input_file="$1" sibling_count="$2" input_dir stem sub_here
+    local input_file="$1" sibling_count="$2" input_dir stem
     input_dir="$(dirname "$input_file")"
     stem="$(basename "${input_file%.*}")"
 
-    embedded_track=""
-    sub_here="$(_sidecar_subtitle_for "$input_file")"
-    [[ -z "$sub_here" ]] && embedded_track="$(_find_eng_subtitle_track "$input_file")"
+    # sub_here / embedded_track are computed by the caller (process_video) before
+    # this call. A foreign-audio source with no subtitle to pair gets its output
+    # tagged "<title> - <lang> audio only" (audio_has_eng / audio_lang set by
+    # _analyse_audio); the " - " is restored after Step 3 flattens separators.
+    if [[ "${audio_has_eng:-1}" -eq 0 && -z "$sub_here" && -z "$embedded_track" && -n "${audio_lang:-}" ]]; then
+        stem="$stem - $audio_lang audio only"
+    fi
 
     local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
     if [[ $sibling_count -eq 1 && "$stem" =~ $tv_pattern ]]; then
@@ -948,11 +964,12 @@ _whisper_detect_english() {
     # Runs the language detector over a manifest of "position<TAB>wav" lines and
     # appends (to the named array) the 1-based HandBrake positions Whisper is
     # confident are English. One python process, model loaded once.
-    # Usage: _whisper_detect_english <manifest> <script.py> <out_array>
-    local manifest="$1" script="$2"; local -n _de_out=$3
+    # Usage: _whisper_detect_english <manifest> <script.py> <out_array> <out_langs>
+    local manifest="$1" script="$2"; local -n _de_out=$3; local -n _de_langs=$4
     [[ -s "$manifest" ]] || return 0
     local pos lang conf n
     while IFS=$'\t' read -r pos lang conf n; do
+        _de_langs+=("$lang")
         [[ "$lang" == "en" ]] && _de_out+=("$pos")
     done < <("$WHISPER_VENV/bin/python" "$script" "$WHISPER_MODEL" "$WHISPER_CONF" < "$manifest" 2>/dev/null)
 }
@@ -974,10 +991,14 @@ _whisper_english_tracks() {
     # Fills the named array with the HandBrake positions of untagged tracks that
     # Whisper is confident are English. Two tiers: (1) blind spread samples;
     # (2) speech-targeted samples if tier 1 finds nothing.
-    # Usage: _whisper_english_tracks <out_array> <input_file>
+    # Usage: _whisper_english_tracks <out_array> <out_lang> <input_file>
+    # <out_lang> receives the dominant detected language when NO English is found
+    # (empty otherwise) so a caller can name a foreign-only source.
     local -n _wet_out=$1
-    local input_file="$2"
-    _wet_out=()
+    local -n _wet_lang=$2
+    local input_file="$3"
+    _wet_out=(); _wet_lang=""
+    local -a _wet_dets=()
     [[ -x "$WHISPER_VENV/bin/python" ]] || return 0
     command -v ffmpeg >/dev/null 2>&1 || return 0
 
@@ -1049,7 +1070,7 @@ PYEOF
             ((k++))
         done
     done
-    _whisper_detect_english "$manifest" "$script" _wet_out
+    _whisper_detect_english "$manifest" "$script" _wet_out _wet_dets
 
     # --- tier 2: speech-targeted samples, only if tier 1 found nothing ---
     if (( ${#_wet_out[@]} == 0 )); then
@@ -1063,50 +1084,111 @@ PYEOF
                 ((k++)); (( k >= 5 )) && break
             done < <(_speech_offsets "$input_file" "$a" "$dur")
         done
-        _whisper_detect_english "$manifest" "$script" _wet_out
+        _whisper_detect_english "$manifest" "$script" _wet_out _wet_dets
+    fi
+
+    # No English anywhere → report the most-detected language for naming.
+    if (( ${#_wet_out[@]} == 0 && ${#_wet_dets[@]} > 0 )); then
+        _wet_lang="$(printf '%s\n' "${_wet_dets[@]}" | sort | uniq -c | sort -rn | awk 'NR==1{print $2}')"
     fi
 
     rm -rf "$tmp"
 }
 
 
-_english_audio_args() {
-    # Echoes HandBrake `--audio <list>` args (in the named array) that restrict
-    # the encode to English audio tracks — but ONLY when the source carries more
-    # than one audio track. A single-track source is left untouched (so a lone
-    # foreign-language track is never dropped), as is a multi-track source that
-    # has no English-tagged stream (we keep the preset's default rather than
-    # risk producing a file with no audio).
-    # HandBrake numbers audio tracks 1-based in source order, so the position
-    # counter below — not the ffmpeg stream index — is what gets passed through.
-    # Usage: _english_audio_args <out_array> <input_file>
+_lang_name() {
+    # Map an ISO 639-1 / 639-2 language code to a friendly single-word name.
+    # Unknown codes fall back to the code with its first letter capitalised.
+    case "${1,,}" in
+        fr|fre|fra) echo "French" ;;      es|spa)     echo "Spanish" ;;
+        de|ger|deu) echo "German" ;;      it|ita)     echo "Italian" ;;
+        pt|por)     echo "Portuguese" ;;  ru|rus)     echo "Russian" ;;
+        ja|jpn)     echo "Japanese" ;;    ko|kor)     echo "Korean" ;;
+        zh|chi|zho|cmn) echo "Chinese" ;; hi|hin)     echo "Hindi" ;;
+        ta|tam)     echo "Tamil" ;;       te|tel)     echo "Telugu" ;;
+        ml|mal)     echo "Malayalam" ;;   kn|kan)     echo "Kannada" ;;
+        bn|ben)     echo "Bengali" ;;     pa|pan)     echo "Punjabi" ;;
+        mr|mar)     echo "Marathi" ;;     gu|guj)     echo "Gujarati" ;;
+        ur|urd)     echo "Urdu" ;;        ar|ara)     echo "Arabic" ;;
+        tr|tur)     echo "Turkish" ;;     th|tha)     echo "Thai" ;;
+        vi|vie)     echo "Vietnamese" ;;  id|ind)     echo "Indonesian" ;;
+        nl|dut|nld) echo "Dutch" ;;       sv|swe)     echo "Swedish" ;;
+        no|nor)     echo "Norwegian" ;;   da|dan)     echo "Danish" ;;
+        fi|fin)     echo "Finnish" ;;     pl|pol)     echo "Polish" ;;
+        cs|cze|ces) echo "Czech" ;;       el|gre|ell) echo "Greek" ;;
+        he|heb)     echo "Hebrew" ;;      uk|ukr)     echo "Ukrainian" ;;
+        hu|hun)     echo "Hungarian" ;;   ro|rum|ron) echo "Romanian" ;;
+        fa|per|fas) echo "Persian" ;;     tl|tgl|fil) echo "Filipino" ;;
+        *) local c="${1,,}"; echo "${c^}" ;;
+    esac
+}
+
+_analyse_audio() {
+    # Fills <out_array> with HandBrake `--audio <list>` args restricting a
+    # MULTI-track source to English — empty for a single-track source (a lone
+    # foreign track is never dropped) or a foreign-only source (the preset
+    # default is kept). HandBrake numbers tracks 1-based in source order, so the
+    # position counter — not the ffmpeg stream index — is what is passed through.
+    #
+    # Also sets, in the caller's scope: audio_has_eng (0/1) and — when 0 —
+    # audio_lang, a friendly name for the source language (from the tag, or from
+    # Whisper for untagged tracks). When want_lang is "false" the foreign probe
+    # is skipped: the caller already has a subtitle, so no "<lang> audio only"
+    # tag will be produced, and a Whisper pass on a subtitled single-untagged
+    # file is avoided.
+    # Usage: _analyse_audio <out_array> <input_file> [want_lang=true]
     local -n _out=$1
     local input_file="$2"
+    local want_lang="${3:-true}"
     _out=()
+    audio_has_eng=1
+    audio_lang=""
 
-    local -a eng_positions=()
     local pos=0 total=0 idx lang
+    local -a eng_positions=() untagged_pos=()
+    local first_foreign=""
     while IFS=',' read -r idx lang; do
         ((pos++)); ((total++))
         case "${lang,,}" in
-            eng|en|english) eng_positions+=("$pos") ;;
+            eng|en|english)                   eng_positions+=("$pos") ;;
+            ""|und|unknown|undefined|mul|zxx) untagged_pos+=("$pos") ;;
+            *) [[ -z "$first_foreign" ]] && first_foreign="${lang,,}" ;;
         esac
     done < <(ffprobe -v quiet -select_streams a \
         -show_entries stream=index:stream_tags=language \
         -of csv=p=0 "$input_file" 2>/dev/null)
 
-    if (( total > 1 && ${#eng_positions[@]} > 0 )); then
-        local IFS=,
-        _out=(--audio "${eng_positions[*]}")
-    elif (( total > 1 )); then
-        # No English-tagged stream among several tracks: ask Whisper which of the
-        # untagged tracks is actually English. A genuinely foreign-only source
-        # yields nothing here and the preset default is kept.
-        local -a whisper_positions=()
-        _whisper_english_tracks whisper_positions "$input_file"
-        if (( ${#whisper_positions[@]} > 0 )); then
-            local IFS=,
-            _out=(--audio "${whisper_positions[*]}")
+    (( total == 0 )) && return 0        # no audio — nothing to restrict or flag
+
+    # English by tag: restrict a multi-track encode and we are done.
+    if (( ${#eng_positions[@]} > 0 )); then
+        (( total > 1 )) && { local IFS=,; _out=(--audio "${eng_positions[*]}"); }
+        return 0
+    fi
+
+    # No English tag. Ask Whisper about the untagged tracks — needed to restrict a
+    # multi-track encode, and to name a foreign-only source. Skip the probe on a
+    # single-track source the caller says is already subtitled (want_lang=false).
+    local wlang=""
+    if (( ${#untagged_pos[@]} > 0 )) && { (( total > 1 )) || [[ "$want_lang" == true ]]; }; then
+        local -a wpos=()
+        _whisper_english_tracks wpos wlang "$input_file"
+        if (( ${#wpos[@]} > 0 )); then
+            (( total > 1 )) && { local IFS=,; _out=(--audio "${wpos[*]}"); }
+            return 0                    # English present among the untagged tracks
+        fi
+    fi
+
+    # No English audio found. Flag as foreign-only ONLY with positive evidence of
+    # a specific foreign language — a real tag, or a confident Whisper detection.
+    # An untagged track Whisper can't place is left alone (untagged audio is
+    # usually English; Whisper being unavailable must not mislabel it), preferring
+    # a real tag over Whisper's guess.
+    if [[ "$want_lang" == true ]]; then
+        if   [[ -n "$first_foreign" ]]; then
+            audio_has_eng=0; audio_lang="$(_lang_name "$first_foreign")"
+        elif [[ -n "$wlang" && "$wlang" != en ]]; then
+            audio_has_eng=0; audio_lang="$(_lang_name "$wlang")"
         fi
     fi
 }
@@ -1449,6 +1531,11 @@ echo
 echo "Applying title case..."
 apply_title_case "$OUTPUT_DIR" --recursive
 apply_title_case "$OUTPUT_DIR" --dirs
+echo
+
+# Restore the " - " separator on foreign-audio-only names that the separator
+# passes above flatten out (…Hindi Audio Only → … - Hindi Audio Only).
+rename_in_path '(\w) ([a-z]+ audio only)(\.\w+)?$' '$1 - $2$3' "$OUTPUT_DIR" --recursive
 echo
 
 echo "Cleanup complete!"
