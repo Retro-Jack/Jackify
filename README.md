@@ -7,6 +7,7 @@ A bash script that automates video conversion using HandBrakeCLI. It copies vide
 - [HandBrakeCLI](https://handbrake.fr/downloads2.php) — separate package from the HandBrake GUI; must be installed independently
 - `ffmpeg` and `ffprobe` — used to extract embedded subtitles from source files
 - `perl` — used for filename cleanup and the progress bar (standard on most Linux systems)
+- **Whisper** (`openai-whisper`) — identifies the English audio track when a multi-track source has none tagged English. Jackify **builds the venv itself on first run** if `WHISPER_VENV` doesn't already have it (a one-time PyTorch download); point `WHISPER_VENV` at an existing whisper venv to reuse it. Needs `python3`.
 
 ## Configuration
 
@@ -40,6 +41,7 @@ Run with no arguments. On startup, Jackify scans `PRESET_DIR` for HandBrake pres
 2. **Convert** — All videos in `STAGING_DIR` are converted using HandBrakeCLI with the selected preset. Output goes to a per-profile folder, `OUTPUT_DIR/<preset name>/` (e.g. `2) Done/Jack 1080/`), so each profile keeps its own tree. A progress bar is shown for each job; already-converted files are skipped.
 
    - **Output placement** — if a video is the only media file in its directory, the output is placed directly in `OUTPUT_DIR` (or in a `Show Name - Season N` subfolder for TV episodes). If sibling files are present, the relative path from `STAGING_DIR` is preserved.
+   - **Audio** — a multi-track source is restricted to its English audio. If no track is *tagged* English, Whisper listens to the untagged tracks and picks the one that actually is (spread samples first, speech-targeted samples if needed); a genuinely foreign-only source keeps the preset default.
    - **Subtitle extraction** — after conversion, Jackify inspects the original source file for an English, non-hearing-impaired, text-based subtitle track. If one is found with at least `SRT_MIN_CUES` cues, it is extracted as a `.srt` alongside the source. If a `.srt` already exists, the extracted version takes precedence — unless the size difference exceeds `SRT_SIZE_THRESHOLD`%, in which case the larger file is used.
    - **Subtitle copy** — any subtitle files matching the video's filename stem are copied to the output directory.
    - **Burned subtitles** — if a matching subtitle is present (extracted or a sidecar), a second HandBrake pass produces a `<name> burned subs` copy with the subtitle burned into the picture. SRT, ASS, SSA, VTT and PGS (`.sup`) can all be burned — text via libass (styling preserved), PGS as bitmaps; ASS/SSA/VTT and PGS are muxed into a temporary MKV first. VobSub (`.idx`/`.sub`) is kept as a sidecar but not burned.

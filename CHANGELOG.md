@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.11.0 — 2026-07-29
+
+### Added
+- **Whisper finds the English audio track when the tags don't.** A multi-track source is already restricted to its English audio, but that relied on a correct `eng` language tag — and rips often leave the real English track untagged (`und`). Now, when several tracks exist and none is tagged English, Whisper (`openai-whisper`, GPU-accelerated) listens to the untagged tracks and detects which one is actually English. Two tiers: first blind samples spread across the file, and — only if those find nothing confident — samples targeted at speech regions (via `silencedetect`), so a music-heavy opening can't fool it. Detection keys on confidence, so music and silence are ignored. A genuinely foreign-only source is left on the preset default. Whisper is required, but Jackify **builds the venv itself on first run** if it isn't already at `WHISPER_VENV` (a one-time PyTorch download) — or reuses an existing whisper venv you point `WHISPER_VENV` at.
+
+---
+
 ## v1.10.1 — 2026-07-29
 
 ### Added

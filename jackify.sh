@@ -19,7 +19,9 @@
 # Errors are written lazily to OUTPUT_DIR/error_log.txt; the terminal only
 # sees a "[WARN] See <log>" pointer. The log is not created on clean runs.
 #
-# Requires: HandBrakeCLI, ffmpeg, perl. Other tools (find, sed, awk, mv, cp) are
+# Requires: HandBrakeCLI, ffmpeg, perl, and Whisper (openai-whisper in a venv,
+# used to identify the English audio track when tags are missing). Other tools
+# (find, sed, awk, mv, cp) are
 # standard on any Linux system.
 # =============================================================================
 
@@ -51,6 +53,12 @@ ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 
 SRT_SIZE_THRESHOLD=20  # % difference considered substantial when comparing SRT sizes
 SRT_MIN_CUES=20        # extracted SRT must have at least this many cues to be used
+
+# Whisper audio-language fallback: when a multi-track source has no English-
+# tagged stream, Whisper detects which untagged track is actually English.
+WHISPER_VENV="/mnt/applications/Linux Applications/_Handy Scripts/_Workshop/whisper-translate/Translate/whisper-env"
+WHISPER_MODEL="tiny"     # language ID needs no more than this; fast on GPU
+WHISPER_CONF=0.6         # min detection confidence to trust a sample (drops music/silence)
 
 PROGRESS_BAR_WIDTH=40
 # Pre-built bars; sliced with ${var:0:N} during progress updates so each tick
@@ -174,6 +182,26 @@ check_file() {
 
 check_command() {
     command -v "$1" &>/dev/null || die "Cannot find command: $1 ($2)"
+}
+
+_ensure_whisper_venv() {
+    # Whisper is required for English audio-track detection. Reuse the venv at
+    # $WHISPER_VENV if it already has openai-whisper; otherwise build it once
+    # (python3 -m venv + pip install), mirroring whisper-translate's first run.
+    if [[ -x "$WHISPER_VENV/bin/python" ]] && "$WHISPER_VENV/bin/python" -c 'import whisper' &>/dev/null; then
+        return 0
+    fi
+    echo "[SETUP] Whisper not found at: $WHISPER_VENV"
+    echo "[SETUP] Building it now (one-time; this pulls in PyTorch, a large download)..."
+    command -v python3 &>/dev/null || die "python3 is required to build the Whisper venv"
+    if [[ ! -x "$WHISPER_VENV/bin/python" ]]; then
+        mkdir -p "$(dirname "$WHISPER_VENV")" 2>/dev/null
+        python3 -m venv "$WHISPER_VENV" || die "Could not create Whisper venv at: $WHISPER_VENV"
+    fi
+    "$WHISPER_VENV/bin/pip" install --quiet --upgrade pip &>/dev/null
+    "$WHISPER_VENV/bin/pip" install --quiet openai-whisper || die "Could not install openai-whisper into: $WHISPER_VENV"
+    "$WHISPER_VENV/bin/python" -c 'import whisper' &>/dev/null || die "Whisper still not importable after install: $WHISPER_VENV"
+    echo "[SETUP] Whisper venv ready."
 }
 
 build_ext_args() {
@@ -910,6 +938,138 @@ _plan_output() {
     fi
 }
 
+# --- Whisper audio-language fallback -----------------------------------------
+# When a multi-track source has NO English-tagged stream, Whisper detects which
+# untagged/und track is actually English (tags are trusted for tagged streams).
+# Optional: every function no-ops silently if the whisper venv or ffmpeg is
+# absent, so Jackify still runs without it.
+
+_whisper_detect_english() {
+    # Runs the language detector over a manifest of "position<TAB>wav" lines and
+    # appends (to the named array) the 1-based HandBrake positions Whisper is
+    # confident are English. One python process, model loaded once.
+    # Usage: _whisper_detect_english <manifest> <script.py> <out_array>
+    local manifest="$1" script="$2"; local -n _de_out=$3
+    [[ -s "$manifest" ]] || return 0
+    local pos lang conf n
+    while IFS=$'\t' read -r pos lang conf n; do
+        [[ "$lang" == "en" ]] && _de_out+=("$pos")
+    done < <("$WHISPER_VENV/bin/python" "$script" "$WHISPER_MODEL" "$WHISPER_CONF" < "$manifest" 2>/dev/null)
+}
+
+_speech_offsets() {
+    # Emit start-offsets (seconds) that fall just inside loud, non-silent regions
+    # — biased toward where dialogue is likely, so tier-2 samples avoid silence.
+    # silencedetect reports the silences; the loud spans are the gaps after them.
+    # Usage: _speech_offsets <file> <ffmpeg_audio_index> <duration>
+    local f="$1" a="$2" dur="$3" end
+    end=$(awk "BEGIN{printf \"%d\", $dur*0.95}")
+    ffmpeg -nostdin -v info -ss 60 -to "$end" -i "$f" -map "0:a:$a" \
+        -af silencedetect=noise=-30dB:d=1.0 -f null - 2>&1 \
+    | awk '/silence_end/ { for (i=1;i<=NF;i++) if ($i=="silence_end:") print int($(i+1))+2 }' \
+    | head -5
+}
+
+_whisper_english_tracks() {
+    # Fills the named array with the HandBrake positions of untagged tracks that
+    # Whisper is confident are English. Two tiers: (1) blind spread samples;
+    # (2) speech-targeted samples if tier 1 finds nothing.
+    # Usage: _whisper_english_tracks <out_array> <input_file>
+    local -n _wet_out=$1
+    local input_file="$2"
+    _wet_out=()
+    [[ -x "$WHISPER_VENV/bin/python" ]] || return 0
+    command -v ffmpeg >/dev/null 2>&1 || return 0
+
+    # Candidate tracks: untagged / undefined only — real language tags are trusted.
+    local -a cand_pos=() cand_aidx=()
+    local pos=0 aidx=0 idx lang
+    while IFS=',' read -r idx lang; do
+        ((pos++))    # 1-based HandBrake track position (aidx stays 0-based for ffmpeg)
+        case "${lang,,}" in
+            ""|und|unknown|undefined|mul|zxx) cand_pos+=("$pos"); cand_aidx+=("$aidx") ;;
+        esac
+        ((aidx++))
+    done < <(ffprobe -v quiet -select_streams a -show_entries stream=index:stream_tags=language -of csv=p=0 "$input_file" 2>/dev/null)
+    (( ${#cand_pos[@]} > 0 )) || return 0
+
+    local dur; dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$input_file" 2>/dev/null)
+    [[ "$dur" =~ ^[0-9.]+$ ]] || return 0
+
+    local tmp; tmp=$(mktemp -d) || return 0
+    local script="$tmp/detect.py"
+    cat > "$script" <<'PYEOF'
+import sys, collections
+try:
+    import whisper, torch
+except Exception:
+    sys.exit(0)
+model_name = sys.argv[1]; conf_min = float(sys.argv[2])
+dev = "cuda" if torch.cuda.is_available() else "cpu"
+try:
+    m = whisper.load_model(model_name, device=dev)
+except Exception:
+    sys.exit(0)
+byp = collections.defaultdict(list)
+for line in sys.stdin:
+    line = line.rstrip("\n")
+    if "\t" not in line:
+        continue
+    p, w = line.split("\t", 1)
+    byp[p].append(w)
+for p, ws in byp.items():
+    votes = collections.defaultdict(float)
+    for w in ws:
+        try:
+            a = whisper.pad_or_trim(whisper.load_audio(w))
+            mel = whisper.log_mel_spectrogram(a, n_mels=m.dims.n_mels).to(m.device)
+            _, pr = m.detect_language(mel)
+            lang = max(pr, key=pr.get); c = pr[lang]
+            if c >= conf_min:
+                votes[lang] += c
+        except Exception:
+            pass
+    if votes:
+        win = max(votes, key=votes.get)
+        print("%s\t%s\t%.2f\t%d" % (p, win, votes[win], len(ws)))
+PYEOF
+
+    local manifest="$tmp/manifest.tsv"
+    local i p a k sfrac t w
+
+    # --- tier 1: blind spread samples (skip head 10% / tail 5%) ---
+    : > "$manifest"
+    for i in "${!cand_pos[@]}"; do
+        p="${cand_pos[$i]}"; a="${cand_aidx[$i]}"; k=0
+        for sfrac in 0.15 0.32 0.50 0.68 0.85; do
+            t=$(awk "BEGIN{printf \"%d\", $dur*$sfrac}")
+            w="$tmp/t${p}_$k.wav"
+            ffmpeg -nostdin -v error -y -ss "$t" -t 30 -i "$input_file" -map "0:a:$a" -vn -ac 1 -ar 16000 "$w" 2>/dev/null \
+                && printf '%s\t%s\n' "$p" "$w" >> "$manifest"
+            ((k++))
+        done
+    done
+    _whisper_detect_english "$manifest" "$script" _wet_out
+
+    # --- tier 2: speech-targeted samples, only if tier 1 found nothing ---
+    if (( ${#_wet_out[@]} == 0 )); then
+        : > "$manifest"
+        for i in "${!cand_pos[@]}"; do
+            p="${cand_pos[$i]}"; a="${cand_aidx[$i]}"; k=0
+            while read -r t; do
+                w="$tmp/s${p}_$k.wav"
+                ffmpeg -nostdin -v error -y -ss "$t" -t 30 -i "$input_file" -map "0:a:$a" -vn -ac 1 -ar 16000 "$w" 2>/dev/null \
+                    && printf '%s\t%s\n' "$p" "$w" >> "$manifest"
+                ((k++)); (( k >= 5 )) && break
+            done < <(_speech_offsets "$input_file" "$a" "$dur")
+        done
+        _whisper_detect_english "$manifest" "$script" _wet_out
+    fi
+
+    rm -rf "$tmp"
+}
+
+
 _english_audio_args() {
     # Echoes HandBrake `--audio <list>` args (in the named array) that restrict
     # the encode to English audio tracks — but ONLY when the source carries more
@@ -938,6 +1098,16 @@ _english_audio_args() {
     if (( total > 1 && ${#eng_positions[@]} > 0 )); then
         local IFS=,
         _out=(--audio "${eng_positions[*]}")
+    elif (( total > 1 )); then
+        # No English-tagged stream among several tracks: ask Whisper which of the
+        # untagged tracks is actually English. A genuinely foreign-only source
+        # yields nothing here and the preset default is kept.
+        local -a whisper_positions=()
+        _whisper_english_tracks whisper_positions "$input_file"
+        if (( ${#whisper_positions[@]} > 0 )); then
+            local IFS=,
+            _out=(--audio "${whisper_positions[*]}")
+        fi
     fi
 }
 
@@ -1148,6 +1318,7 @@ check_file "$HANDBRAKE_CLI"  "HandBrake CLI"
 check_path "$PRESET_DIR"     "Preset directory"
 check_command ffmpeg          "FFmpeg"
 check_command ffprobe         "FFprobe"
+_ensure_whisper_venv
 
 echo "[OK] Prerequisites met"
 echo
