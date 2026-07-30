@@ -473,15 +473,6 @@ process_video() {
     sub_here="$(_sidecar_subtitle_for "$input_file")"
     [[ -z "$sub_here" ]] && embedded_track="$(_find_eng_subtitle_track "$input_file")"
 
-    # Analyse audio up front: English-track restriction for the encode, plus
-    # whether any English audio exists and (if not) the source language — so a
-    # foreign-only source with no subtitle is named "<title> - <lang> audio
-    # only". Done before _plan_output so that name is set for the skip-check.
-    local -a audio_args=()
-    local audio_has_eng=1 audio_lang=""
-    local _want_lang=true; [[ -n "$sub_here" || -n "$embedded_track" ]] && _want_lang=false
-    _analyse_audio audio_args "$input_file" "$_want_lang"
-
     # Route the output: a movie/srt pair (matching sidecar, or an embedded text
     # track) lands in its OWN folder named after the media file, with the .srt
     # moved in beside it renamed to match. See _plan_output for the full rules.
@@ -519,10 +510,30 @@ $check_err"
     fi
     # ------------------------------
 
-    # audio_args (English-track restriction) and audio_has_eng / audio_lang were
-    # set by _analyse_audio near the top; audio_args is reused by the burn pass.
-    [[ ${#audio_args[@]} -gt 0 ]] && echo "  Audio: multiple tracks — keeping English only (${audio_args[1]})"
-    [[ $audio_has_eng -eq 0 ]] && echo "  Audio: no English track — output tagged \"$audio_lang audio only\""
+    # Analyse the audio: restrict a multi-track encode to English, and detect
+    # whether the source has any English audio at all. With no English audio AND
+    # no subtitle to pair, the output is tagged "<lang> audio only" so a
+    # foreign-only file stands out in the library. audio_args is reused verbatim
+    # by the subtitle-burn pass below. Run here (after the skip/integrity checks)
+    # so an already-converted file is never needlessly scanned.
+    local -a audio_args=()
+    local audio_has_eng=1 audio_lang=""
+    local _want_lang=true; [[ -n "$sub_here" || -n "$embedded_track" ]] && _want_lang=false
+    echo "  Scanning audio..."
+    _analyse_audio audio_args "$input_file" "$_want_lang"
+    if (( audio_has_eng == 0 )); then
+        local _foreign_out="${output_file%.*} - $audio_lang audio only.${OUTPUT_FORMAT}"
+        if [[ -f "$_foreign_out" ]]; then
+            echo "  Audio: no English track — \"$audio_lang audio only\" already exists, skipping"
+            ((videos_skipped++)); return
+        fi
+        echo "  Audio: no English audio — tagging output \"$audio_lang audio only\""
+        output_file="$_foreign_out"
+    elif (( ${#audio_args[@]} > 0 )); then
+        echo "  Audio: multiple tracks — keeping English only (${audio_args[1]})"
+    else
+        echo "  Audio: English audio present"
+    fi
 
     # --preset-import-file + --preset are both required to select a named
     # preset from a JSON file (HandBrake quirk).
@@ -925,14 +936,7 @@ _plan_output() {
     input_dir="$(dirname "$input_file")"
     stem="$(basename "${input_file%.*}")"
 
-    # sub_here / embedded_track are computed by the caller (process_video) before
-    # this call. A foreign-audio source with no subtitle to pair gets its output
-    # tagged "<title> - <lang> audio only" (audio_has_eng / audio_lang set by
-    # _analyse_audio); the " - " is restored after Step 3 flattens separators.
-    if [[ "${audio_has_eng:-1}" -eq 0 && -z "$sub_here" && -z "$embedded_track" && -n "${audio_lang:-}" ]]; then
-        stem="$stem - $audio_lang audio only"
-    fi
-
+    # sub_here / embedded_track were computed by the caller (process_video).
     local tv_pattern='^(.*)[._ ][Ss]([0-9]{1,2})[Ee][0-9]+'
     if [[ $sibling_count -eq 1 && "$stem" =~ $tv_pattern ]]; then
         local show_raw="${BASH_REMATCH[1]}"
