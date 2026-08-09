@@ -839,7 +839,7 @@ s/(\w[\w'\x{2019}]*)/do{
     ($orig eq uc($orig) && length($orig)>1 && length($orig)<=4 && !grep{$_ eq lc($orig)}@minor) ? $orig :
     (grep{$_ eq $w}@minor) ? $w : ucfirst($w)
 }/ge;
-s/(?<=\d) ([a-z][\w'\x{2019}]*)/" ".(grep{$_ eq $1}@minor ? $1 : ucfirst($1))/ge;
+s/(?<=\d) ([a-z][\w'\x{2019}]*)/" ".ucfirst($1)/ge;
 s/^(\w)/uc($1)/e;
 $_ .= $burned
 PERL

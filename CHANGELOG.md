@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.12.1 — 2026-08-07
+
+### Fixed
+- **A numbered filename lost its first word to a stray `1`.** Title casing has a pass for a lowercase word following a digit — the case a number prefix creates, since the word after the number starts the title. Its condition was written `grep{...}@minor ? $1 : ucfirst($1)`, which Perl parses as `grep({...} (@minor ? $1 : ucfirst($1)))`: the ternary became grep's *list argument* instead of a test of its result, so the expression returned grep's **match count** and that number was substituted into the name. `01 The Hound of the Baskervilles (1939).mp4` came out as `01 1 Hound of the Baskervilles (1939).mp4`. Only minor words were affected (`the`, `a`, `of`, …) and only directly after a digit, so it stayed hidden until a numbered collection went through. The pass now capitalises unconditionally, which is what it existed to do — parenthesising the `grep` would have fixed the stray `1` but left the word lowercase and the pass doing nothing.
+
+---
+
 ## v1.12.0 — 2026-07-30
 
 ### Added
