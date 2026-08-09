@@ -444,7 +444,7 @@ process_video() {
     # already exists. Output destination is decided by _plan_output:
     #   - movie/srt pair (matching sidecar OR embedded text track)
     #                                             -> OUTPUT_DIR/<media>/ (its own
-    #                                                folder; the .srt is moved in
+    #                                                folder; the .srt is copied in
     #                                                beside it, renamed to match).
     #   - Lone TV episode (SxxExx pattern)        -> OUTPUT_DIR/<Show> - Season <N>/.
     #   - Videos sharing a folder (kept playlist, …), no subtitle
@@ -475,7 +475,7 @@ process_video() {
 
     # Route the output: a movie/srt pair (matching sidecar, or an embedded text
     # track) lands in its OWN folder named after the media file, with the .srt
-    # moved in beside it renamed to match. See _plan_output for the full rules.
+    # copied in beside it renamed to match. See _plan_output for the full rules.
     local output_file output_dir
     _plan_output "$input_file" "$sibling_count"
 
@@ -556,7 +556,7 @@ $check_err"
 
         local had_sibling_srt=false
 
-        # Move sibling subtitles from staging to output_dir before extraction, so
+        # Copy sibling subtitles from staging to output_dir before extraction, so
         # the .srt that extract_subtitle compares against already lives at its
         # final home and the burn pass reads from there. A sidecar may carry a
         # language tag (YouTube / 4K Tube write video.en.srt, video.eng.srt,
@@ -565,20 +565,29 @@ $check_err"
         # burn steps — which key on <stem>.srt — pick it up. If two sidecars
         # would collapse to the same name (e.g. .en.srt + .es.srt), the first
         # wins and the rest are left for staging cleanup.
-        local sub sub_name sub_ext sub_dest sub_mv_err
+        #
+        # This copies rather than moves: staging keeps its sidecars, so clearing
+        # the output tree to force a reconvert doesn't take the only copy of the
+        # subtitles with it. Staging is emptied on request at the end of a run
+        # anyway, so nothing accumulates.
+        local sub sub_name sub_ext sub_dest sub_cp_err
         while IFS= read -r -d '' sub; do
             sub_name="$(basename "$sub")"
             sub_ext="${sub_name##*.}"
             _subtitle_belongs_to_stem "$sub_name" "$stem" || continue
             sub_dest="$output_dir/$stem.$sub_ext"
             [[ -e "$sub_dest" && "$sub" != "$sub_dest" ]] && continue
+            # Nothing to do when the sidecar already sits at its destination
+            # (input and output resolving to the same directory) -- cp would
+            # refuse "same file" and log a spurious warning.
+            [[ "$sub" -ef "$sub_dest" ]] && { [[ "${sub_ext,,}" == "srt" ]] && had_sibling_srt=true; continue; }
             echo
-            echo "    Moving subtitles: $sub_name"
+            echo "    Copying subtitles: $sub_name"
             [[ "${sub_ext,,}" == "srt" ]] && had_sibling_srt=true
-            if ! sub_mv_err=$(mv "$sub" "$sub_dest" 2>&1); then
-                warn "Subtitle move failed: $sub_name" "src: $sub
+            if ! sub_cp_err=$(cp -p "$sub" "$sub_dest" 2>&1); then
+                warn "Subtitle copy failed: $sub_name" "src: $sub
 dst: $sub_dest
-$sub_mv_err"
+$sub_cp_err"
             fi
         done < <(find -L "$input_dir" -type f "${exclude_args[@]}" \( "${sub_ext_args[@]}" \) -print0 2>/dev/null)
 
@@ -924,7 +933,7 @@ _plan_output() {
     # Placement rules, in order:
     #   1. lone TV episode (SxxExx)                 -> OUTPUT_DIR/<Show> - Season N/
     #   2. movie/srt pair — a matching sidecar OR    -> OUTPUT_DIR/<media>/  (its OWN
-    #      an embedded English text track               folder; the .srt is moved in
+    #      an embedded English text track               folder; the .srt is copied in
     #                                                    beside it, renamed to match)
     #   3. lone plain video                         -> OUTPUT_DIR/  (flat)
     #   4. video sharing a folder (e.g. a kept       -> preserve that relative folder

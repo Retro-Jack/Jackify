@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.12.2 — 2026-08-07
+
+### Changed
+- **Sidecar subtitles are now copied into the output rather than moved.** A matching `.srt` was relocated out of staging, so once a run finished the only copy lived in the output tree — and clearing the output to force a reconvert silently took the subtitles with it, leaving staging with videos that no longer had anything to burn. They're copied now (timestamps preserved), so staging stays a complete, re-runnable set. Nothing accumulates, since staging is emptied on request at the end of a run. A sidecar that already sits at its destination is detected and skipped, so `cp` can't refuse "same file" when input and output resolve to the same directory.
+
+---
+
 ## v1.12.1 — 2026-08-07
 
 ### Fixed
