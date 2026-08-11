@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.12.4 — 2026-08-11
+
+### Fixed
+- **Scene sample clips were being converted.** `EXCLUDED_BASENAMES` only matched a file named exactly `sample.*`, but releases almost always tack the marker onto the release name instead — `ghost.in.the.shell.1995.2160p.uhd.bluray.x265-haiku.sample.mkv`. That 30-second clip got a full 2160p encode and landed in the library beside the feature. Each excluded basename is now also matched as a trailing segment. The pattern is anchored to a 2–4 character extension rather than the obvious `*[._-]sample.*`, because the trailing `.*` in that form swallows the rest of the name and would also skip a real film called `The.Sample.Room.2020.mkv`.
+
+---
+
 ## v1.12.3 — 2026-08-11
 
 ### Added

@@ -216,10 +216,25 @@ build_ext_args() {
 }
 
 build_exclude_args() {
-    # Builds `! -iname X.* ! -iname Y.* …` from EXCLUDED_BASENAMES into the named array.
+    # Builds the find exclusions from EXCLUDED_BASENAMES into the named array.
+    # Two shapes per name, because scene releases use both:
+    #   sample.mkv                       -> "<name>.*"
+    #   The.Movie.2160p.x265-GRP.sample.mkv -> "*[._-]<name>.*"
+    # The second matters more than the first: a bare "sample.mkv" is rare, while
+    # a sample tacked onto the release name is the usual convention — and
+    # without it a 30-second clip gets a full encode and lands in the library.
+    # The separator class keeps it to a real trailing segment, so a title that
+    # merely contains the word is untouched.
     local -n _out=$1
     for name in "${EXCLUDED_BASENAMES[@]}"; do
         _out+=("!" "-iname" "${name}.*")
+        # The trailing form is anchored to a 2-4 character extension on purpose.
+        # "*[._-]${name}.*" looks equivalent but the trailing .* swallows the
+        # rest of the name, so it also matches the word mid-title and would skip
+        # a real film called "The.Sample.Room.2020.mkv".
+        _out+=("!" "-iname" "*[._-]${name}.??")
+        _out+=("!" "-iname" "*[._-]${name}.???")
+        _out+=("!" "-iname" "*[._-]${name}.????")
     done
 }
 
