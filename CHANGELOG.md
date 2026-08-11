@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.13.1 — 2026-08-11
+
+### Changed
+- **`tidy-names.sh`: `--delete-junk` folded into `--apply`.** Junk removal is no longer a separate opt-in — the dry run plans the deletions alongside the renames, and applying the plan applies all of it. One less way to run half the plan and wonder why the sample clips are still there.
+- The plan no longer lists a rename for a file it also plans to delete. `--apply` was always correct (deletions run first, so the rename pass never sees them), but the dry run showed both and read as a contradiction — and the plan is the thing you're meant to trust.
+
+---
+
 ## v1.13.0 — 2026-08-11
 
 ### Added

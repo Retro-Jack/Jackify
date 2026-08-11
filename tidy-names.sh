@@ -10,7 +10,8 @@
 #                                 bare years wrapped in parentheses
 #   3. Title case                 minor words stay lowercase, acronyms survive
 #
-# Optionally (--delete-junk) it also removes sample/preview clips and folders.
+# It also removes sample/preview clips and folders — planned in the dry run,
+# carried out by --apply along with the renames.
 #
 # ---------------------------------------------------------------------------
 # IT DOES NOTHING BY DEFAULT.
@@ -27,10 +28,11 @@
 #
 # Usage:
 #   ./tidy-names.sh <dir>                     # dry run (default)
-#   ./tidy-names.sh --apply <dir>             # rename for real
-#   ./tidy-names.sh --delete-junk <dir>       # dry run, incl. junk removal
-#   ./tidy-names.sh --apply --delete-junk <d> # rename and delete for real
+#   ./tidy-names.sh --apply <dir>             # rename AND delete junk, for real
 #   ./tidy-names.sh --files-only <dir>        # skip directory renames
+#
+# --apply deletes as well as renames. Junk removal is not a separate opt-in:
+# if you are applying the plan, you are applying all of it.
 #
 # The full plan is always written to ./tidy-names-plan.txt.
 # =============================================================================
@@ -41,14 +43,12 @@ JUNK_BASENAMES=(sample samples preview previews)
 PLAN="${PLAN_FILE:-./tidy-names-plan.txt}"
 
 APPLY=false
-DELETE_JUNK=false
 FILES_ONLY=false
 TARGET=""
 
 while (( $# )); do
     case "$1" in
         --apply)       APPLY=true ;;
-        --delete-junk) DELETE_JUNK=true ;;
         --files-only)  FILES_ONLY=true ;;
         -h|--help)     sed -n '2,40p' "$0"; exit 0 ;;
         -*)            echo "Unknown option: $1" >&2; exit 2 ;;
@@ -57,7 +57,7 @@ while (( $# )); do
     shift
 done
 
-[[ -n "$TARGET" ]] || { echo "Usage: $0 [--apply] [--delete-junk] [--files-only] <dir>" >&2; exit 2; }
+[[ -n "$TARGET" ]] || { echo "Usage: $0 [--apply] [--files-only] <dir>" >&2; exit 2; }
 [[ -d "$TARGET" ]] || { echo "Not a directory: $TARGET" >&2; exit 2; }
 
 # Refuse to operate anywhere that would be catastrophic to get wrong.
@@ -77,7 +77,7 @@ log() { printf '%s\n' "$*" >> "$PLAN"; }
 log "tidy-names plan"
 log "target : $TARGET"
 log "mode   : $($APPLY && echo APPLY || echo 'DRY RUN (nothing will change)')"
-log "junk   : $($DELETE_JUNK && echo 'sample/preview removal ON' || echo 'sample/preview removal off')"
+log "junk   : sample/preview removal included"
 log "date   : $(date '+%Y-%m-%d %H:%M:%S %Z')"
 log "$(printf '%.0s-' {1..70})"
 log ""
@@ -151,18 +151,20 @@ for g in "${junk_globs[@]}"; do
 done
 junk_match+=(")")
 
-if $DELETE_JUNK; then
+doomed=()   # planned deletions, so the rename pass can ignore them
+{
     log "== JUNK REMOVAL =="
     while IFS= read -r -d '' item; do
         [[ "$item" == "$TARGET"/?* ]] || continue
         log "DELETE  ${item#$TARGET/}"
+        doomed+=("$item")
         ((deletions++))
         if $APPLY; then
             rm -rf -- "$item" || { log "  !! failed"; ((errors++)); }
         fi
     done < <(find -L "$TARGET" -mindepth 1 \( -type f -o -type d \) "${junk_match[@]}" -print0 2>/dev/null)
     log ""
-fi
+}
 
 # ----- renames ---------------------------------------------------------------
 # Depth-first so a directory is renamed only after its contents are handled.
@@ -176,6 +178,14 @@ PLAN_ABS="$(cd -- "$(dirname -- "$PLAN")" 2>/dev/null && pwd -P)/$(basename -- "
 while IFS= read -r -d '' item; do
     # Never rename the plan we are writing into.
     [[ "$item" == "$PLAN_ABS" ]] && continue
+    # Nor anything already listed for deletion, or anything inside it — under
+    # --apply the delete runs first so this can't happen, but the dry-run plan
+    # would otherwise show a rename for a file it also plans to remove.
+    skip=false
+    for d in ${doomed+"${doomed[@]}"}; do
+        [[ "$item" == "$d" || "$item" == "$d"/* ]] && { skip=true; break; }
+    done
+    $skip && continue
     parent="$(dirname -- "$item")"
     base="$(basename -- "$item")"
     if [[ -d "$item" ]]; then new="$(clean_name "$base" false)"; else new="$(clean_name "$base" true)"; fi
@@ -200,7 +210,7 @@ echo "  target      : $TARGET"
 echo "  mode        : $($APPLY && echo 'APPLY — changes written' || echo 'DRY RUN — nothing changed')"
 printf '  renames     : %d\n' "$renames"
 printf '  collisions  : %d (skipped, target name already exists)\n' "$collisions"
-$DELETE_JUNK && printf '  deletions   : %d\n' "$deletions"
+printf '  deletions   : %d\n' "$deletions"
 (( errors > 0 )) && printf '  errors      : %d\n' "$errors"
 echo "  full plan   : $PLAN"
 $APPLY || echo "  Re-run with --apply to make these changes. There is no undo."
