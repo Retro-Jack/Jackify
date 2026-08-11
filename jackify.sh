@@ -77,6 +77,7 @@ found_subs_burned=0
 subs_extracted=0
 extracted_subs_burned=0
 rename_errors=0
+junk_removed=0
 
 # Set true by extract_subtitle when it actually writes/replaces the target .srt
 # (i.e. the extracted track won out over any existing file). Read by
@@ -215,27 +216,66 @@ build_ext_args() {
     done
 }
 
-build_exclude_args() {
-    # Builds the find exclusions from EXCLUDED_BASENAMES into the named array.
+_excluded_name_globs() {
+    # The globs that identify a junk file, from EXCLUDED_BASENAMES, into the
+    # named array. Single source of truth: build_exclude_args negates these to
+    # skip such files, purge_excluded_from_staging matches them to delete.
+    #
     # Two shapes per name, because scene releases use both:
-    #   sample.mkv                       -> "<name>.*"
-    #   The.Movie.2160p.x265-GRP.sample.mkv -> "*[._-]<name>.*"
-    # The second matters more than the first: a bare "sample.mkv" is rare, while
-    # a sample tacked onto the release name is the usual convention — and
-    # without it a 30-second clip gets a full encode and lands in the library.
-    # The separator class keeps it to a real trailing segment, so a title that
-    # merely contains the word is untouched.
-    local -n _out=$1
+    #   sample.mkv                          -> "<name>.*"
+    #   The.Movie.2160p.x265-GRP.sample.mkv -> "*[._-]<name>.<ext>"
+    # The second matters more: a bare "sample.mkv" is rare, while a sample
+    # tacked onto the release name is the usual convention — and without it a
+    # 30-second clip gets a full encode and lands in the library.
+    #
+    # The trailing form is anchored to a 2-4 character extension on purpose.
+    # "*[._-]<name>.*" looks equivalent, but that trailing .* swallows the rest
+    # of the name, so it matches the word mid-title too and would skip (or now
+    # delete) a real film called "The.Sample.Room.2020.mkv".
+    local -n _globs=$1
+    local name
     for name in "${EXCLUDED_BASENAMES[@]}"; do
-        _out+=("!" "-iname" "${name}.*")
-        # The trailing form is anchored to a 2-4 character extension on purpose.
-        # "*[._-]${name}.*" looks equivalent but the trailing .* swallows the
-        # rest of the name, so it also matches the word mid-title and would skip
-        # a real film called "The.Sample.Room.2020.mkv".
-        _out+=("!" "-iname" "*[._-]${name}.??")
-        _out+=("!" "-iname" "*[._-]${name}.???")
-        _out+=("!" "-iname" "*[._-]${name}.????")
+        _globs+=("${name}.*" "*[._-]${name}.??" "*[._-]${name}.???" "*[._-]${name}.????")
     done
+}
+
+build_exclude_args() {
+    # Negated form: ! -iname A ! -iname B … so find skips the junk.
+    local -n _out=$1
+    local -a _g=(); _excluded_name_globs _g
+    local g
+    for g in "${_g[@]}"; do _out+=("!" "-iname" "$g"); done
+}
+
+build_match_args() {
+    # Positive form: \( -iname A -o -iname B … \) so find selects the junk.
+    local -n _out=$1
+    local -a _g=(); _excluded_name_globs _g
+    local g first=true
+    _out+=("(")
+    for g in "${_g[@]}"; do
+        $first || _out+=("-o")
+        first=false
+        _out+=("-iname" "$g")
+    done
+    _out+=(")")
+}
+
+purge_excluded_from_staging() {
+    # Deletes sample/preview clips that reached the staging folder. Scoped to
+    # STAGING_DIR only and to names the globs above match — the downloads tree
+    # is never touched, so seeding is unaffected.
+    [[ -d "$STAGING_DIR" ]] || return 0
+    local -a match=(); build_match_args match
+    local f rm_err
+    while IFS= read -r -d '' f; do
+        echo "  Removing: $(basename "$f")"
+        if rm_err=$(rm -f -- "$f" 2>&1); then
+            ((junk_removed++))
+        else
+            warn "Could not remove junk file: $f" "$rm_err"
+        fi
+    done < <(find -L "$STAGING_DIR" -type f "${match[@]}" -print0 2>/dev/null)
 }
 
 _parse_find_opts() {
@@ -778,7 +818,7 @@ my $g = qr/
     # release groups
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     # release groups
-    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|GRP|
+    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|
     # release groups (legacy)
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
 # Drop [bracketed] segments wholesale.
@@ -1518,6 +1558,11 @@ else
     clear
 fi
 
+# ----- Step 1b: Remove junk from staging --------------------------------------
+# Sample/preview clips are never copied in, but one can arrive by hand or
+# predate the exclusion. Staging only — the downloads tree is left alone.
+purge_excluded_from_staging
+
 # ----- Step 2: Convert -------------------------------------------------------
 
 mapfile -d '' video_list < <(find -L "$STAGING_DIR" -type f "${exclude_args[@]}" \( "${ext_args[@]}" \) -print0)
@@ -1585,6 +1630,7 @@ printf 'Extracted subs burned: %d\n' "$extracted_subs_burned"
 echo  "------------------------"
 echo  "Name cleanup:          Completed"
 printf 'Videos skipped:        %d\n' "$videos_skipped"
+(( junk_removed > 0 )) && printf 'Junk files removed:    %d\n' "$junk_removed"
 if (( videos_failed + files_failed + rename_errors > 0 )); then
     echo
     [[ $videos_failed -gt 0 ]] && printf 'Videos failed:         %d\n' "$videos_failed"

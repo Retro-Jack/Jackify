@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.12.6 — 2026-08-11
+
+### Added
+- **Sample and preview clips found in staging are now deleted, not just skipped.** A new step between the copy and the convert removes anything matching `EXCLUDED_BASENAMES`, and the run summary reports the count. They're never copied in, so this catches one placed by hand or predating the exclusion. **Scoped to `STAGING_DIR` only** — the downloads tree is never touched, so completed torrents keep seeding.
+- The globs behind this live in one place (`_excluded_name_globs`) now, with `build_exclude_args` negating them to skip such files and `build_match_args` matching them to delete. The two can't drift apart, which matters when the same list decides both what to ignore and what to remove.
+
+### Removed
+- **`GRP` dropped from the release-group list** — it was a placeholder from testing, not a group seen in the wild.
+
+---
+
 ## v1.12.5 — 2026-08-11
 
 ### Added
