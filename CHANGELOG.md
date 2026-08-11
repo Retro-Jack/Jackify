@@ -3,6 +3,7 @@
 ## v1.13.0 — 2026-08-11
 
 ### Added
+- **Documentation for `tidy-names.sh`** — a README section and a [Tidy Names](https://github.com/Retro-Jack/Jackify/wiki/Tidy-Names) wiki page covering usage, why the dry run is the default, what the archive trial actually found, and where the tool genuinely helps.
 - **`tidy-names.sh` — Jackify's name cleanup as a standalone tool.** Runs the same three passes (DVD title-number removal, tag stripping, title case) plus optional sample/preview removal against any directory, so an existing library can be tidied without a conversion.
 
   **It does nothing without `--apply`.** The default is a dry run that writes a full plan and changes nothing, because these rules assume a scene-release filename where every token that isn't the title is junk — an assumption that does not hold for a curated archive. A first dry run over a 100k-file media archive proposed **65,430 renames**, almost all of them wrong: a mirrored website whose MD5 filenames were being title-cased (breaking its links), 8,642 deliberately-ALLCAPS names lowercased, and 71 files losing the `burned subs` marker Jackify itself keys on. That is the point of the plan — read it before trusting it.

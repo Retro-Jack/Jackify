@@ -57,3 +57,20 @@ Warnings and errors are logged to `error_log.txt` in the `OUTPUT_DIR` root — o
 Preset JSON files live in the `Handbrake Presets/` folder. Each file contains a single HandBrake preset exported from the HandBrake GUI — the preset name is read from the `PresetName` field in the JSON.
 
 To add a preset: export it from the HandBrake GUI and drop the JSON into `Handbrake Presets/`. It will appear in the selection menu automatically on the next run.
+
+## tidy-names.sh
+
+Jackify's name cleanup, as a standalone tool. It runs the same three passes — DVD title-number removal, tag stripping, title case — against any directory you point it at, plus optional sample/preview removal. Use it to tidy a library that already exists, without converting anything.
+
+```bash
+./tidy-names.sh <dir>                       # dry run: writes a plan, changes nothing
+./tidy-names.sh --apply <dir>               # rename for real
+./tidy-names.sh --delete-junk <dir>         # also remove sample/preview files and folders
+./tidy-names.sh --files-only <dir>          # leave directory names alone
+```
+
+**It does nothing without `--apply`.** The default is a dry run that writes every proposed change to `tidy-names-plan.txt` and touches nothing. That default is deliberate, not caution for its own sake: these rules assume a scene-release filename, where every token that isn't the title is junk. A curated library breaks that assumption — `1080p` may be describing an asset rather than tagging a rip, hashes are identifiers, and ALLCAPS is often intentional. A first dry run over a 100,000-file archive proposed 65,430 renames, nearly all of them wrong.
+
+So: run it, read the plan, then decide. There is no undo.
+
+It refuses to run on `/`, `/home`, `/mnt` and similar; renames depth-first, so a folder is only renamed once its contents are done; never overwrites (a name collision is reported and skipped); and skips its own plan file.
