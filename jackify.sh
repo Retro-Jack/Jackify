@@ -47,7 +47,10 @@ HANDBRAKE_TIMEOUT="4h"   # wall-clock ceiling for a single HandBrake encode
 
 VIDEO_EXTENSIONS=(avi mkv mov wmv flv mp4 mpeg mpg m4v ts vob webm)
 SUBTITLE_EXTENSIONS=(srt ass ssa vtt sub idx sup)
-EXCLUDED_BASENAMES=(sample preview)
+# Junk clips: skipped on copy/convert, and deleted from staging (see
+# _excluded_name_globs). Plurals are listed separately because the globs match a
+# whole trailing segment -- "sample" does not cover "free.samples.mkv".
+EXCLUDED_BASENAMES=(sample samples preview previews)
 
 ERROR_LOG="$OUTPUT_DIR/error_log.txt"
 

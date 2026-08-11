@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.12.7 — 2026-08-11
+
+### Added
+- **Plural junk names — `samples` and `previews` — join `EXCLUDED_BASENAMES`.** The globs match a whole trailing segment, so `sample` already covered `free.sample.mkv` but not `free.samples.mkv` or a bare `samples.mkv`. Both are now skipped on copy and deleted from staging like the singulars.
+
+Worth knowing, since these are deleted rather than skipped: a release named `<something>.samples.<ext>` is treated as junk, so a copy of the 2012 film *Free Samples* named `Free.Samples.mkv` would be removed. The usual `Free.Samples.2012.mkv` is safe — the year sits between the word and the extension, so the trailing-segment anchor doesn't match.
+
+---
+
 ## v1.12.6 — 2026-08-11
 
 ### Added
