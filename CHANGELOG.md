@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.12.8 — 2026-08-11
+
+### Changed
+- **No sample or preview files at all.** The match is now the word as a whole separator-delimited token *anywhere* in a name, not only as the final segment — and whole junk folders go too, since scene releases park the clip in a `Sample/` directory that none of the dotted globs matched. Any directory left empty by the deletions is swept up after.
+
+  This deliberately drops the anchoring added in v1.12.4/v1.12.6, which existed to protect a real film whose title contains the word: `The.Sample.Room.2020.mkv` and `Free.Samples.2012.mkv` are now treated as junk and deleted. That is the intended trade — remove the offending word from `EXCLUDED_BASENAMES` if a real title ever collides.
+
+  Still scoped to `STAGING_DIR`, and the folder deletion is guarded so it can only touch a directory below the staging root, never the root itself. Downloads remain untouched, so seeding is unaffected.
+
+---
+
 ## v1.12.7 — 2026-08-11
 
 ### Added

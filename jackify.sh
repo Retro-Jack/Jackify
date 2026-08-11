@@ -224,21 +224,25 @@ _excluded_name_globs() {
     # named array. Single source of truth: build_exclude_args negates these to
     # skip such files, purge_excluded_from_staging matches them to delete.
     #
-    # Two shapes per name, because scene releases use both:
-    #   sample.mkv                          -> "<name>.*"
-    #   The.Movie.2160p.x265-GRP.sample.mkv -> "*[._-]<name>.<ext>"
-    # The second matters more: a bare "sample.mkv" is rare, while a sample
-    # tacked onto the release name is the usual convention — and without it a
-    # 30-second clip gets a full encode and lands in the library.
+    # Matched as a whole separator-delimited token, anywhere in the name:
+    #   sample.mkv
+    #   free.samples.mkv
+    #   The.Movie.2160p.x265-GRP.sample.mkv
     #
-    # The trailing form is anchored to a 2-4 character extension on purpose.
-    # "*[._-]<name>.*" looks equivalent, but that trailing .* swallows the rest
-    # of the name, so it matches the word mid-title too and would skip (or now
-    # delete) a real film called "The.Sample.Room.2020.mkv".
+    # This is deliberately broad. An earlier version anchored the trailing form
+    # to a 2-4 character extension so the word could only match as the LAST
+    # segment, which protected a real film called "The.Sample.Room.2020.mkv".
+    # That protection was dropped on request: no sample or preview files at all
+    # is worth more than the rare title that contains the word. A film whose
+    # name has "sample"/"preview" as its own word WILL be treated as junk —
+    # remove that word from EXCLUDED_BASENAMES if you ever hit one.
     local -n _globs=$1
     local name
     for name in "${EXCLUDED_BASENAMES[@]}"; do
-        _globs+=("${name}.*" "*[._-]${name}.??" "*[._-]${name}.???" "*[._-]${name}.????")
+        # The bare "<name>" form matters for directories: scene releases park
+        # the clip in a folder called exactly "Sample", which none of the
+        # dotted/separated globs match.
+        _globs+=("${name}" "${name}.*" "*[._ -]${name}.*" "*[._ -]${name}")
     done
 }
 
@@ -271,6 +275,8 @@ purge_excluded_from_staging() {
     [[ -d "$STAGING_DIR" ]] || return 0
     local -a match=(); build_match_args match
     local f rm_err
+
+    # Files first.
     while IFS= read -r -d '' f; do
         echo "  Removing: $(basename "$f")"
         if rm_err=$(rm -f -- "$f" 2>&1); then
@@ -279,6 +285,24 @@ purge_excluded_from_staging() {
             warn "Could not remove junk file: $f" "$rm_err"
         fi
     done < <(find -L "$STAGING_DIR" -type f "${match[@]}" -print0 2>/dev/null)
+
+    # Then whole junk directories — scene releases park the clip in "Sample/".
+    # Guarded so this can only ever remove a directory BELOW the staging root,
+    # never the root itself.
+    local d
+    while IFS= read -r -d '' d; do
+        [[ "$d" == "$STAGING_DIR"/?* ]] || continue
+        echo "  Removing folder: $(basename "$d")"
+        if rm_err=$(rm -rf -- "$d" 2>&1); then
+            ((junk_removed++))
+        else
+            warn "Could not remove junk folder: $d" "$rm_err"
+        fi
+    done < <(find -L "$STAGING_DIR" -mindepth 1 -type d "${match[@]}" -print0 2>/dev/null)
+
+    # Finally, directories left empty by the deletions above (the "Sample/"
+    # folder whose only content was the clip).
+    find "$STAGING_DIR" -mindepth 1 -type d -empty -delete 2>/dev/null
 }
 
 _parse_find_opts() {
