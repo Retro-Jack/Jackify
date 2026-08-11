@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.14.0 — 2026-08-11
+
+### Added
+- **`check-sync.sh` — fails when `tidy-names.sh` and `jackify.sh` disagree.** The two hold copies of the cleanup rules rather than sharing code, so a tag added to one and not the other leaves them quietly producing different names for the same file. This compares the technical-tag alternation, the release-group alternation and the junk basename list — ignoring comments and whitespace, so reformatting isn't mistaken for a change — and names the entries that differ and which file each is in. Verified by injecting all three kinds of drift and confirming each is caught.
+
+---
+
 ## v1.13.1 — 2026-08-11
 
 ### Changed

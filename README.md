@@ -73,3 +73,13 @@ Jackify's name cleanup, as a standalone tool. It runs the same three passes — 
 So: run it, read the plan, then decide. There is no undo.
 
 It refuses to run on `/`, `/home`, `/mnt` and similar; renames depth-first, so a folder is only renamed once its contents are done; never overwrites (a name collision is reported and skipped); and skips its own plan file.
+
+## check-sync.sh
+
+`tidy-names.sh` holds its own copy of the cleanup rules — the tag and group alternations and the junk basename list — rather than sharing code with `jackify.sh`. Edit one and forget the other and you get two tools that quietly disagree about what a filename should become.
+
+```bash
+./check-sync.sh        # exits 1 if they have drifted
+```
+
+It compares both alternations and the junk list, ignoring comments and whitespace so a reflow doesn't read as a change, and names the specific entries that differ and which file they're in. Run it after any change to either script's tag lists.
