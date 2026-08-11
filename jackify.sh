@@ -741,7 +741,7 @@ my $t = qr/
     # video codecs
     H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
     # audio codecs and channel layouts
-    TrueHD|Atmos|DTS-HD|DTS|DD5\.1|AC3|AAC(?:\d+\.\d+)?|FLAC(?:\d+\.\d+)?|Opus(?:\d+\.\d+)?|MP3|7\.1|5\.1|DDP5.1|Dual-?Audio|
+    TrueHD|Atmos|DTS-HD|DTS|DDP?\d+\.\d+|AC3|AAC(?:\d+\.\d+)?|FLAC(?:\d+\.\d+)?|Opus(?:\d+\.\d+)?|MP3|7\.1|5\.1|Dual-?Audio|
     # HDR, bit-depth and remux markers
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|900mb|REMUX|
     # edition and re-release tags
@@ -763,7 +763,7 @@ my $g = qr/
     # release groups
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     # release groups
-    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|
+    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|
     # release groups (legacy)
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
 # Drop [bracketed] segments wholesale.

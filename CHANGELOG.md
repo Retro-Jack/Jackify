@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.12.3 — 2026-08-11
+
+### Added
+- **Five release groups seen in the download library that were surviving cleanup:** `AJP69`, `LAMA`, `HAiKU`, `Grym` and `HiC`. Each was left dangling on the end of a real filename (`Bingo…AAC-LAMA.mp4`, `ghost.in.the.shell…x265-haiku.mkv`, `Where.The.River.Runs.Black…XviD-HiC.avi`). They join the trailing-group alternation, so they're only stripped from the end of a name, where a group is recognisable as junk.
+
+### Fixed
+- **Audio channel-layout tags beyond `5.1` weren't recognised.** The list carried `DD5.1` and `DDP5.1` literally, so `Bingo.1991.1080p.AMZN.WEB-DL.DD2.0.H.264-AJP69.mkv` kept its `DD2.0`. Both are replaced by `DDP?\d+\.\d+`, which covers `DD2.0`, `DD5.1`, `DDP5.1`, `DDP7.1` and anything else in that shape — and incidentally fixes `DDP5.1`'s unescaped dot, which would have matched `DDP5X1`.
+
+Both were found by running the live tag-stripper over every name in the torrent library and looking at what it left behind, rather than by reading the list.
+
+---
+
 ## v1.12.2 — 2026-08-07
 
 ### Changed
