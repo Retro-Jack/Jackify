@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.12.5 — 2026-08-11
+
+### Added
+- **`GRP` joins the release-group list.**
+
+### Changed
+- **A release group directly before a trailing `sample` now strips.** Groups are only recognised as junk at the end of a name, and the end-anchor already tolerated a trailing ` burned subs`; it now tolerates a trailing `sample` segment the same way. So `ghost.in.the.shell.1995.2160p.uhd.bluray.x265-haiku.sample.mkv` loses its `haiku` instead of carrying it through. Mostly belt-and-braces since v1.12.4 stops sample clips being converted at all, but it covers one arriving by another route. Deliberately *not* a general mid-name group strip — that would eat real title words, which is why the anchoring exists.
+
+---
+
 ## v1.12.4 — 2026-08-11
 
 ### Fixed

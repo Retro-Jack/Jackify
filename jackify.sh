@@ -778,7 +778,7 @@ my $g = qr/
     # release groups
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     # release groups
-    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|
+    NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|GRP|
     # release groups (legacy)
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
 # Drop [bracketed] segments wholesale.
@@ -795,7 +795,7 @@ s/(?<![A-Za-z0-9])(?:UIndex|YTS|RARBG|EZTV|ETTV)\.[A-Za-z]{2,}\b[\s._-]*//gi;
 # and a " burned subs" tag; on directories there is no extension). The end
 # anchor tolerates both so a bare group strips off files, not just folders.
 # Repeat in case removing one reveals another.
-1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
+1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?(?:[\s._-]+sample)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 # Tag wrapped in (parentheses).
 s/\s*\(\s*$t\s*\)\s*//gi;
 # Tag standing alone on token boundaries.
@@ -805,7 +805,7 @@ s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
 s/(?<![a-zA-Z0-9])(?:(?:Hindi|Tamil|Telugu|Malayalam|Kannada|Bengali|Marathi|Punjabi|Gujarati|Urdu|Bhojpuri|English|Korean|Japanese|Mandarin|Cantonese|Chinese|Spanish|French|German|Italian|Russian|Arabic|Turkish|Thai|Vietnamese|Indonesian|Portuguese|Dual[\s._-]?Audio)[\s._-]+)?Dubbed(?![a-zA-Z0-9])//gi;
 # Second trailing-group pass: a group that sat before the technical tags
 # ("Movie.YIFY.1080p") only reaches the end once those tags are gone.
-1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
+1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?(?:[\s._-]+sample)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 # 4K Tube appends a "video <resolution> <language>" descriptor before the file
 # extension (e.g. "video 2160p60 english", "video 1080p uk", "video 2160p
 # original"). Strip that whole trailing block (each part after "video" optional),
@@ -814,7 +814,7 @@ s/(?<![a-zA-Z0-9])(?:(?:Hindi|Tamil|Telugu|Malayalam|Kannada|Bengali|Marathi|Pun
 # ending in the word English — is never touched. A trailing " burned subs" tag
 # (present on the burned-in copy) is allowed before the end, so that copy strips
 # the same as the plain output.
-1 while s/[\s._-]+video(?:[\s._-]+(?:2160|1440|1080|720|576|480|360)p\d{0,3})?(?:[\s._-]+(?:english|eng|en|original|orig|uk|gb|us))?(?=(?:[\s._-]+burned[\s._-]+subs)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
+1 while s/[\s._-]+video(?:[\s._-]+(?:2160|1440|1080|720|576|480|360)p\d{0,3})?(?:[\s._-]+(?:english|eng|en|original|orig|uk|gb|us))?(?=(?:[\s._-]+burned[\s._-]+subs)?(?:[\s._-]+sample)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 # Resolution with a frame-rate suffix (2160p60, 1080p60) that the plain
 # 2160p/1080p tags above miss (their word boundary is defeated by the fps digits).
 s/(?<![A-Za-z0-9])(?:2160|1440|1080|720|576|480|360)p\d{2,3}(?![A-Za-z0-9])//gi;
