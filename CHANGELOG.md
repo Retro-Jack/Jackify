@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.14.2 — 2026-08-11
+
+### Fixed
+- **Episode codes were being lowercased: `S01E02` became `S01e02`.** Title casing preserves an ALLCAPS token only when it is 4 characters or fewer, and `S01E02` is six — so every TV filename lost the capital `E`. Both `jackify.sh` and `tidy-names.sh` carried the flaw, and both are fixed: a pass after the casing normalises `S<digits>E<digits>` back to upper case, which also **repairs names an earlier run already lowercased** (50 such files were sitting in one library).
+
+  Side effect worth having: on a real TV tree the proposed-rename count fell from 944 to 731, because 213 of those files were only being touched to lowercase their episode code.
+
+---
+
 ## v1.14.1 — 2026-08-11
 
 ### Fixed

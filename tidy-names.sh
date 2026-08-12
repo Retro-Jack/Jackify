@@ -136,6 +136,10 @@ s/(\w[\w'\x{2019}]*)/do{
 }/ge;
 s/(?<=\d) ([a-z][\w'\x{2019}]*)/" ".ucfirst($1)/ge;
 s/^(\w)/uc($1)/e;
+# Episode codes: the ALLCAPS guard above only protects tokens of 4 characters
+# or fewer, so S01E02 came out as S01e02. Normalise them back to upper case --
+# which also repairs names an earlier run already lowercased.
+s/\bS(\d{1,3})E(\d{1,3})\b/"S".$1."E".$2/gie;
 $_ .= $burned;
 PERL
 
