@@ -58,6 +58,14 @@ Preset JSON files live in the `Handbrake Presets/` folder. Each file contains a 
 
 To add a preset: export it from the HandBrake GUI and drop the JSON into `Handbrake Presets/`. It will appear in the selection menu automatically on the next run.
 
+### GPU acceleration
+
+Encoding runs on the GPU via `nvenc_h265`, set in the preset. Decoding also runs on the GPU, but that has to be requested on the command line (`HB_DECODE` in `jackify.sh`) — the `VideoHWDecode` key the GUI writes into the preset is ignored by HandBrakeCLI.
+
+The shipped presets have deinterlacing and comb detection **off**, because every source here is progressive film and comb detection was scanning every frame to find nothing. A genuinely interlaced source (DVD rip, TV capture) needs `PictureDeinterlaceFilter` set back to `decomb` and `PictureCombDetectPreset` to `default` for that job.
+
+A GPU encode still uses plenty of CPU — scaling, subtitle rendering, audio and muxing all stay in software. To check whether acceleration is actually working, watch the GPU trace rather than the CPU one; a starved encoder shows as a busy CPU next to a near-idle GPU.
+
 ## tidy-names.sh
 
 Jackify's name cleanup, as a standalone tool. It runs the same three passes — DVD title-number removal, tag stripping, title case — against any directory you point it at, and removes sample/preview clips and folders. Use it to tidy a library that already exists, without converting anything.

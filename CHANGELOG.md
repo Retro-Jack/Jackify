@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.15.0 — 2026-08-12
+
+### Changed
+- **Encodes are 2.6× faster: the GPU was being starved, not bypassed.** btop showed the CPU pinned during every run, which read as "HandBrake is ignoring the GPU" — but NVENC was engaged the whole time. It was sitting idle waiting for a software filter chain in front of it. On a full 90-minute film the GPU trace sat at **7%** while the CPU ran 197 threads. Two fixes, both measured on the same film end to end:
+
+  - **Comb detect is off in both presets.** It was scanning every frame of every film looking for interlacing. On `Bingo (1991)` — a `field_order=progressive` 23.976fps BluRay — it examined 129,507 frames and flagged 3,307 of them, all false positives from grain and motion, which decomb then blended. So the expensive pass was not merely wasted, it was very slightly degrading the picture. This is the bigger of the two wins by a wide margin.
+  - **Hardware decode is requested on the command line, not in the preset.** The presets carry a `VideoHWDecode` key and it was set, but HandBrakeCLI ignores it — that key is read by the GUI only. The flag `--enable-hw-decoding nvdec` is now passed on all three HandBrake invocations (the main encode and both subtitle-burn paths) via a new `HB_DECODE` array.
+
+  Full film, subtitle burn-in active, same source and preset:
+
+  | | Before | After |
+  |---|---|---|
+  | Wall clock | 5m 35s | **2m 07s** |
+  | CPU time | 3,954s | **1,456s** |
+  | GPU utilisation | 7% | 37% |
+  | Output size | 4,623,295,132 | 4,619,713,937 |
+
+  Isolated on a 60-second slice, comb detect accounts for −47% of CPU time and hardware decode a further −15%. Output is unchanged for practical purposes: 0.08% size difference, PSNR 44–46dB between the two encodes, and burned-in subtitles verified frame-by-frame as pixel-identical in position and styling.
+
+  **Deinterlacing is now off, so a genuinely interlaced source will keep its combing.** Every source here is progressive film, which is why this is the right default — but a DVD rip or TV capture would need `PictureDeinterlaceFilter` and `PictureCombDetectPreset` put back to `decomb`/`default` in the preset for that job.
+
+  Hardware decode does not make the CPU idle, and it never will: the 1080p→720p downscale, libass subtitle rendering, audio encode and muxing all stay in software, and frames come back off the GPU into system memory to be filtered. Expect HandBrake to keep a good share of the CPU busy — the GPU trace, not the CPU one, is what tells you whether acceleration is working.
+
+---
+
 ## v1.14.2 — 2026-08-11
 
 ### Fixed
