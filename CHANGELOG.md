@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.14.1 — 2026-08-11
+
+### Fixed
+- **`tidy-names.sh` was stripping the `burned subs` marker.** Jackify writes its burned-in copy as `<name> burned subs` and keys on that exact lowercase string to recognise its own output; title casing turned it into `Burned Subs`, so 53 files in a real library would have read as unconverted on the next run. The suffix is now stashed before any pass runs and re-appended verbatim — the same guard `jackify.sh` has, which I failed to carry across when extracting the transform.
+- **The older bracketed `[Burned Subs]` form is protected too.** That one was worse: the wholesale `[bracket]` strip deleted it outright, collapsing the file onto the non-burned copy of the same name. Three files in the library use it, and all three were saved only by the collision guard refusing to overwrite.
+
+Verified against the archive: the same run that previously mangled 56 files now touches 50 of them and preserves the marker on every one.
+
+---
+
 ## v1.14.0 — 2026-08-11
 
 ### Added

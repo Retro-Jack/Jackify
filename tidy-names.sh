@@ -100,14 +100,27 @@ my $g = qr/
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
+# Jackify writes a burned-in copy as "<name> burned subs" and keys on that
+# exact lowercase string to recognise its own output. Title casing would make
+# it "Burned Subs" and the file would read as unconverted on the next run.
+# Stashed here, before anything else runs, so the trailing-separator trims
+# below see the real end of the name; re-appended verbatim at the end.
+# Two conventions exist in the wild: the plain suffix Jackify writes now, and
+# an older bracketed "[Burned Subs]". The bracketed form matters twice over —
+# the wholesale [bracket] strip below would delete it entirely, collapsing the
+# file onto the non-burned copy of the same name. Whichever is found is put
+# back exactly as it was.
+my $burned = "";
+if    (s/\s*\[\s*burned[\s._-]*subs\s*\]\s*$//i) { $burned = " [Burned Subs]"; }
+elsif (s/\s*-?\s*burned[\s._-]*subs\s*$//i)        { $burned = " burned subs"; }
 s/^(\d+)[\s]+-[\s]+(.+)$/$2/;
 s/\s*\[[^\]]*\]//g;
 s/\bwww\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+[\s._-]*//gi;
 s/(?<![A-Za-z0-9])(?:UIndex|YTS|RARBG|EZTV|ETTV)\.[A-Za-z]{2,}\b[\s._-]*//gi;
-1 while s/[\s._-]+(?:$g)(?=[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
+1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?(?:[\s._-]+sample)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 s/\s*\(\s*$t\s*\)\s*//gi;
 s/(?<![a-zA-Z0-9])$t(?![a-zA-Z0-9])//gi;
-1 while s/[\s._-]+(?:$g)(?=[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
+1 while s/[\s._-]+(?:$g)(?=(?:[\s._-]+burned[\s._-]+subs)?(?:[\s._-]+sample)?[\s._-]*(?:\.[A-Za-z0-9]{1,4})?$)//i;
 s/(?<![A-Za-z0-9])(?:2160|1440|1080|720|576|480|360)p\d{2,3}(?![A-Za-z0-9])//gi;
 s/[.\-_]{2,}([^.])/$1 ? ".$1" : ""/ge;
 s/[.\-_]+$//;
@@ -123,6 +136,7 @@ s/(\w[\w'\x{2019}]*)/do{
 }/ge;
 s/(?<=\d) ([a-z][\w'\x{2019}]*)/" ".ucfirst($1)/ge;
 s/^(\w)/uc($1)/e;
+$_ .= $burned;
 PERL
 
 clean_name() {
