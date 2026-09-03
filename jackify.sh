@@ -828,14 +828,20 @@ my $t = qr/
     2160p|1080p|720p|480p|4K|UHD|
     # disc sources and streaming services
     Blu-?Ray|BDRip|BRRip|WEB-DL|WEBRip|HDTV|DVDRip|DVDScr|AMZN|NF|HULU|DSNP|
+    # bare WEB, but only when a codec follows it, so that a title ending in
+    # the word Web (Charlotte, Along Came A Spider) keeps it
+    WEB(?=[\s._-]+(?:x26[45]|H\.?26[45]|HEVC|AVC|DDP?\d|AAC|EAC3|AC3))|
     # video codecs
-    H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
+    H[\s.]?265|H[\s.]?264|x265|x264|XviD|DivX|HEVC|AVC|
     # audio codecs and channel layouts
-    TrueHD|Atmos|DTS-HD|DTS|DDP?\d+\.\d+|AC3|AAC(?:\d+\.\d+)?|FLAC(?:\d+\.\d+)?|Opus(?:\d+\.\d+)?|MP3|7\.1|5\.1|Dual-?Audio|
+    TrueHD|Atmos|DTS-HD|DTS|DDP?\d+[\s.]\d+|EAC3|AC3|AAC(?:\d+\.\d+)?|FLAC(?:\d+\.\d+)?|Opus(?:\d+\.\d+)?|MP3|7\.1|5\.1|Dual-?Audio|
     # HDR, bit-depth and remux markers
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|900mb|REMUX|
     # edition and re-release tags
-    PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|UNCUT|IMAX|
+    PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|UNCUT|IMAX|UPDATED|
+    # iNTERNAL only when a source or codec follows, so the film Internal
+    # Affairs keeps its first word
+    iNTERNAL(?=[\s._-]+(?:DVDRip|BDRip|BRRip|Blu-?Ray|WEB|HDTV|x26[45]|H[\s.]?26[45]|HEVC))|
     # descriptive metadata
     TV[\s._-]?Mini-?Series|Mini-?Series/xi;
 # Release groups live in their own alternation, stripped ONLY from the end
@@ -854,6 +860,7 @@ my $g = qr/
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     # release groups
     NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|
+    SARTRE|TORRENTGALAXY|JFF|RAWR|DiMEPiECE|MeGusta|NGP|MULTiPLY|
     # release groups (legacy)
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
 # Drop [bracketed] segments wholesale.

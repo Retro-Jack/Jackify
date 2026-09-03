@@ -88,10 +88,16 @@ read -r -d '' PERL_CLEAN <<'PERL'
 my $t = qr/
     2160p|1080p|720p|480p|4K|UHD|
     Blu-?Ray|BDRip|BRRip|WEB-DL|WEBRip|HDTV|DVDRip|DVDScr|AMZN|NF|HULU|DSNP|
-    H\.?265|H\.?264|x265|x264|XviD|DivX|HEVC|AVC|
-    TrueHD|Atmos|DTS-HD|DTS|DDP?\d+\.\d+|AC3|AAC(?:\d+\.\d+)?|FLAC(?:\d+\.\d+)?|Opus(?:\d+\.\d+)?|MP3|7\.1|5\.1|Dual-?Audio|
+    # bare WEB, but only when a codec follows it, so that a title ending in
+    # the word Web (Charlotte, Along Came A Spider) keeps it
+    WEB(?=[\s._-]+(?:x26[45]|H\.?26[45]|HEVC|AVC|DDP?\d|AAC|EAC3|AC3))|
+    H[\s.]?265|H[\s.]?264|x265|x264|XviD|DivX|HEVC|AVC|
+    TrueHD|Atmos|DTS-HD|DTS|DDP?\d+[\s.]\d+|EAC3|AC3|AAC(?:\d+\.\d+)?|FLAC(?:\d+\.\d+)?|Opus(?:\d+\.\d+)?|MP3|7\.1|5\.1|Dual-?Audio|
     HDR10\+|HDR10|HDR|SDR|DoVi|10bit|8bit|HLG|900mb|REMUX|
-    PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|UNCUT|IMAX|
+    PROPER|REPACK|EXTENDED|THEATRICAL|UNRATED|UNCUT|IMAX|UPDATED|
+    # iNTERNAL only when a source or codec follows, so the film Internal
+    # Affairs keeps its first word
+    iNTERNAL(?=[\s._-]+(?:DVDRip|BDRip|BRRip|Blu-?Ray|WEB|HDTV|x26[45]|H[\s.]?26[45]|HEVC))|
     TV[\s._-]?Mini-?Series|Mini-?Series/xi;
 my $g = qr/
     YIFY|YTS|RARBG|SPARKS|GECKOS|DRONES|ROVERS|LOL|DIMENSION|KILLERS|FLEET|IMMERSE|BATV|DEFLATE|TBS|
@@ -99,6 +105,7 @@ my $g = qr/
     HorribleSubs|Erai-raws|SubsPlease|Judas|EMBER|AnimeRG|Varyg|
     TERMiNAL|EPSiLON|FraMeSToR|WiLDCAT|COASTER|MULVAcoded|
     NTG|FLUX|ION10|CAKES|PECULATE|Headpatter|WR3CK|OFT|Deceit|AJP69|LAMA|HAiKU|Grym|HiC|
+    SARTRE|TORRENTGALAXY|JFF|RAWR|DiMEPiECE|MeGusta|NGP|MULTiPLY|
     aXXo|ViTE|DiAMOND|WAF|ESiR|BONE/xi;
 # Jackify writes a burned-in copy as "<name> burned subs" and keys on that
 # exact lowercase string to recognise its own output. Title casing would make

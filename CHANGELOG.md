@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.15.1 — 2026-09-03
+
+### Changed
+- **New tags and release groups from the current download queue.** A sweep of both `Finished/Files` and `Current/Files` found eleven junk tokens surviving the name cleanup. Added:
+  - **Technical tags:** `EAC3`, `UPDATED`.
+  - **Release groups:** `SARTRE`, `TORRENTGALAXY`, `JFF`, `RAWR`, `DiMEPiECE`, `MeGusta`, `NGP`, `MULTiPLY`.
+- **Two tags are matched only in context, because both are real title words.** Bare `WEB` (as in `S10E03.WEB.x264`) strips only when a codec follows it, so *Charlottes Web* and *The Web* survive; `iNTERNAL` strips only when a source or codec follows, so *Internal Affairs* keeps its first word. This is the same reasoning that already keeps the release groups end-anchored.
+- **Space-separated codec tags now match.** Releases whose dots have already been flattened wrote `DDP2 0` and `H 264`, which the dotted patterns missed — `DDP?\d+[\s.]\d+` and `H[\s.]?26[45]` cover both forms.
+
+Verified by running the extracted cleanup rules over every name in both download folders (39 entries), and against a regression set of titles that legitimately contain tag-like words — Charlottes Web, The Web, Internal Affairs, Killers Of The Flower Moon, Don Juan DeMarco, Fleet Of Time. Mirrored into `tidy-names.sh`; `check-sync.sh` reports in sync.
+
 ## v1.15.0 — 2026-08-12
 
 ### Changed
