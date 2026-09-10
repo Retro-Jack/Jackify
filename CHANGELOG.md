@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.15.2 — 2026-09-11
+
+### Fixed
+- **A rename collision warned on every run instead of resolving itself.** `do_rename` skipped when the tidy name was taken, which left the item under its untidy name — so the next run hit the identical collision and warned again. *The Secret Life Of Walter Mitty (1947)* logged on three consecutive runs and would have kept logging forever; nothing about re-running could clear it. It now steps aside to a numbered name, exactly as the numbered-prefix rename a few lines below already did, so the name is tidied and the collision is settled once. The warning stays — a collision is still worth knowing about — but it now describes something that happened rather than something that did not.
+  The trigger was a pair of directories differing only in the case of one letter, `Of` against `of`, which on case-sensitive ext4 are two entries that look identical in a file manager. That is why the log appeared to name a file that was not there.
+  `tidy-names.sh` has the same branch and is deliberately left alone: it reports first and acts only under `--apply`, so "target exists" there is it telling you about a conflict to look at, not noise from an unattended run.
+
 ## v1.15.1 — 2026-09-03
 
 ### Changed

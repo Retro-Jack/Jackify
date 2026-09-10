@@ -386,9 +386,21 @@ do_rename() {
     name="$(basename "$item")"
     [[ -n "$new_name" && "$new_name" != "$name" ]] || return 0
     if [[ -e "$parent/$new_name" ]]; then
-        warn "Rename skipped (target exists): $name -> $new_name" "parent: $parent"
+        # The tidy name is taken. Skipping leaves the item under its untidy
+        # name, so the NEXT run hits the identical collision and warns again —
+        # the warning could never clear itself, and one title logged on three
+        # consecutive runs. Step aside instead, the way the numbered-prefix
+        # rename above already does, so the name is tidied and the collision
+        # is resolved once.
+        local stem ext
+        if [[ ! -d "$item" && "$new_name" == *.* ]]; then
+            ext=".${new_name##*.}"; stem="${new_name%.*}"
+        else
+            ext=""; stem="$new_name"
+        fi
+        new_name="$(_dedupe_name "$parent" "$stem" "$ext")"
+        warn "Rename collided, used a numbered name: $name -> $new_name" "parent: $parent"
         ((rename_errors++))
-        return 0
     fi
     echo "  Renaming: $name -> $new_name"
     local mv_err
